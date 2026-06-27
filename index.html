@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>📚 刷题宝 · 完整版</title>
+    <!-- PWA：可安装到手机桌面、离线打开 -->
+    <meta name="theme-color" content="#4f46e5">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="刷题宝">
+    <style>
+        :root {
+            --bg-body: #f5f7fb; --bg-app: #ffffff; --bg-card: #f8fafc;
+            --text-primary: #0f172a; --text-secondary: #1e293b; --text-muted: #64748b;
+            --border-color: #e2e8f0; --shadow: 0 0 30px rgba(0,0,0,0.05);
+            --header-gradient: linear-gradient(135deg, #4f46e5, #7c3aed); --tag-bg: #f1f4f9;
+        }
+        body.dark {
+            --bg-body: #0f172a; --bg-app: #1e293b; --bg-card: #334155;
+            --text-primary: #f1f5f9; --text-secondary: #e2e8f0; --text-muted: #94a3b8;
+            --border-color: #475569; --shadow: 0 0 30px rgba(0,0,0,0.4);
+            --header-gradient: linear-gradient(135deg, #1e1b4b, #4c1d95); --tag-bg: #475569;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg-body); color: var(--text-primary); padding: 0 0 80px 0; min-height: 100vh; display: flex; justify-content: center; transition: background 0.3s, color 0.3s; }
+        #app { max-width: 480px; width: 100%; background: var(--bg-app); min-height: 100vh; box-shadow: var(--shadow); position: relative; transition: background 0.3s; }
+        .header { background: var(--header-gradient); color: #fff; padding: 14px 16px 10px; position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 12px rgba(79,70,229,0.3); }
+        .header-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; }
+        .header h1 { font-size: 18px; font-weight: 700; }
+        .header h1 span { font-weight: 400; opacity: 0.85; font-size: 12px; }
+        .progress-text { font-size: 12px; background: rgba(255,255,255,0.2); padding: 3px 12px; border-radius: 20px; font-weight: 500; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 4px; background: var(--bg-card); border-bottom: 1px solid var(--border-color); position: sticky; top: 60px; z-index: 10; transition: background 0.3s; }
+        .toolbar .btn-sm { padding: 4px 12px; border-radius: 14px; border: 1px solid var(--border-color); background: var(--bg-app); font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
+        .toolbar .btn-sm:active { transform: scale(0.94); }
+        .toolbar .btn-sm.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+        .toolbar .btn-sm.danger { border-color: #fca5a5; color: #b91c1c; }
+        .toolbar .btn-sm.danger.active { background: #ef4444; color: #fff; border-color: #ef4444; }
+        .subject-tabs { display: flex; gap: 6px; padding: 8px 12px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: var(--bg-app); border-bottom: 1px solid var(--border-color); position: sticky; top: 98px; z-index: 10; transition: background 0.3s; }
+        .subject-tabs::-webkit-scrollbar { display: none; }
+        .subject-tab { flex: 0 0 auto; padding: 5px 14px; border-radius: 16px; font-size: 13px; font-weight: 500; background: var(--tag-bg); color: var(--text-muted); border: none; cursor: pointer; transition: all 0.25s; white-space: nowrap; touch-action: manipulation; }
+        .subject-tab.active { background: #4f46e5; color: #fff; box-shadow: 0 2px 8px rgba(79,70,229,0.3); }
+        .type-filters { display: flex; gap: 6px; padding: 6px 12px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: var(--bg-app); border-bottom: 1px solid var(--border-color); position: sticky; top: 138px; z-index: 10; transition: background 0.3s; }
+        .type-filters::-webkit-scrollbar { display: none; }
+        .type-btn { flex: 0 0 auto; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 500; background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
+        .type-btn.active { background: #eef2ff; color: #4f46e5; border-color: #4f46e5; }
+        body.dark .type-btn.active { background: #3730a3; color: #a5b4fc; border-color: #4f46e5; }
+        .question-area { padding: 12px 16px 20px; }
+        .grid-container { margin-bottom: 12px; background: var(--bg-card); padding: 8px; border-radius: 10px; border: 1px solid var(--border-color); transition: background 0.3s; }
+        .grid-title { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+        .grid { display: flex; flex-wrap: wrap; gap: 4px; }
+        .grid-item { width: 30px; height: 30px; border-radius: 6px; background: var(--bg-app); border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; color: var(--text-muted); }
+        .grid-item:active { transform: scale(0.9); }
+        .grid-item.current { border: 2px solid #4f46e5; color: #4f46e5; font-weight: 700; }
+        .grid-item.answered { background: #93c5fd; color: #1e3a8a; border-color: #60a5fa; }
+        .grid-item.correct { background: #86efac; color: #14532d; border-color: #4ade80; }
+        .grid-item.wrong { background: #fca5a5; color: #7f1d1d; border-color: #f87171; }
+        body.dark .grid-item.answered { background: #1e3a8a; color: #93c5fd; }
+        body.dark .grid-item.correct { background: #14532d; color: #86efac; }
+        body.dark .grid-item.wrong { background: #7f1d1d; color: #fca5a5; }
+        body.dark .grid-item.current { border-color: #818cf8; color: #a5b4fc; }
+        .q-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 4px; }
+        .q-number { font-size: 13px; font-weight: 600; color: #4f46e5; background: #eef2ff; padding: 2px 12px; border-radius: 12px; }
+        body.dark .q-number { background: #3730a3; color: #a5b4fc; }
+        .q-type-badge { font-size: 11px; color: var(--text-muted); background: var(--tag-bg); padding: 2px 12px; border-radius: 12px; }
+        .q-text { font-size: 15px; line-height: 1.7; font-weight: 500; color: var(--text-primary); margin-bottom: 14px; padding: 4px 0; }
+        .options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+        .option-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; background: var(--bg-card); border-radius: 10px; border: 2px solid transparent; transition: all 0.2s; cursor: pointer; touch-action: manipulation; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+        .option-item:active { transform: scale(0.98); }
+        .option-item .label { font-weight: 600; color: var(--text-muted); flex-shrink: 0; min-width: 22px; font-size: 13px; }
+        .option-item .text { color: var(--text-secondary); }
+        .option-item.selected { border-color: #4f46e5; background: #eef2ff; }
+        body.dark .option-item.selected { background: #312e81; border-color: #818cf8; }
+        .option-item.correct { border-color: #22c55e; background: #dcfce7; }
+        body.dark .option-item.correct { background: #14532d; border-color: #4ade80; }
+        .option-item.wrong { border-color: #ef4444; background: #fee2e2; }
+        body.dark .option-item.wrong { background: #7f1d1d; border-color: #f87171; }
+        .option-item.disabled { cursor: default; opacity: 0.85; }
+        .option-item.disabled:active { transform: none; }
+        .option-item .check-mark { margin-left: auto; font-size: 16px; }
+        .explanation { margin-top: 10px; padding: 12px 14px; background: var(--bg-card); border-radius: 10px; border-left: 4px solid #4f46e5; display: none; transition: background 0.3s; }
+        .explanation.show { display: block; animation: fadeUp 0.3s ease; }
+        .explanation .title { font-weight: 600; color: #4f46e5; font-size: 12px; margin-bottom: 2px; }
+        .explanation .content { font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+        .passage-box { background: var(--bg-card); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--border-color); font-size: 13px; line-height: 1.7; color: var(--text-secondary); max-height: 200px; overflow-y: auto; transition: background 0.3s; }
+        .passage-box .p-title { font-weight: 600; color: #4f46e5; margin-bottom: 4px; font-size: 12px; }
+        body.dark .passage-box .p-title { color: #a5b4fc; }
+        .blank-answer { display: inline-block; background: #dcfce7; padding: 0 8px; border-radius: 4px; color: #16a34a; font-weight: 600; }
+        body.dark .blank-answer { background: #14532d; color: #86efac; }
+        .nav-area { display: flex; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+        .nav-btn { flex: 1; padding: 10px 0; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; touch-action: manipulation; text-align: center; }
+        .nav-btn:active { transform: scale(0.96); }
+        .nav-btn.prev { background: var(--tag-bg); color: var(--text-muted); }
+        .nav-btn.next { background: #4f46e5; color: #fff; box-shadow: 0 2px 8px rgba(79,70,229,0.3); }
+        .nav-btn:disabled { opacity: 0.4; pointer-events: none; }
+        .stats-bar { display: flex; justify-content: space-around; padding: 8px 12px; background: var(--bg-card); border-radius: 10px; margin-top: 12px; font-size: 12px; color: var(--text-muted); transition: background 0.3s; position: relative; }
+        .stats-bar .stat-item { text-align: center; cursor: pointer; }
+        .stats-bar .stat-item .num { font-weight: 700; color: var(--text-primary); font-size: 15px; }
+        .stats-bar .stat-item .num.green { color: #22c55e; }
+        .stats-bar .stat-item .num.red { color: #ef4444; }
+        .stats-bar .stat-item .num.blue { color: #4f46e5; }
+        body.dark .stats-bar .stat-item .num.blue { color: #818cf8; }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+        .empty-state .icon { font-size: 36px; margin-bottom: 8px; }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+        ::-webkit-scrollbar { width:0; height:0; }
+        .essay-box { background: var(--bg-card); border-radius: 10px; padding: 12px 14px; margin: 10px 0; border: 1px solid var(--border-color); font-size: 14px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; transition: background 0.3s; }
+        .toggle-answer-btn { padding: 6px 14px; border:none; border-radius: 8px; background:var(--tag-bg); color:var(--text-secondary); font-size:12px; font-weight:500; cursor:pointer; transition:all 0.2s; touch-action:manipulation; }
+        .toggle-answer-btn:active { transform:scale(0.94); }
+        .toggle-answer-btn.active { background:#4f46e5; color:#fff; }
+        .flex-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+        .study-mode-badge { font-size:11px; padding:2px 10px; border-radius:12px; background:#fef3c7; color:#92400e; }
+        .translation-box { background: #eff6ff; border-radius: 8px; padding: 10px 12px; margin-top: 6px; border-left: 3px solid #3b82f6; font-size: 14px; line-height: 1.7; color: #1e3a8a; display: none; }
+        body.dark .translation-box { background: #1e293b; color: #93c5fd; border-left-color: #6366f1; }
+        .translation-box.show { display: block; animation: fadeUp 0.3s ease; }
+        .translation-box .t-label { font-weight: 600; color: #2563eb; margin-right: 4px; }
+        body.dark .translation-box .t-label { color: #818cf8; }
+        .trans-option { margin-left: 20px; }
+        .btn-shuffle { background: #e0e7ff; color: #4f46e5; border-color: #a5b4fc; }
+        body.dark .btn-shuffle { background: #312e81; color: #a5b4fc; border-color: #4f46e5; }
+        .btn-trans { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
+        body.dark .btn-trans { background: #1e3a8a; color: #93c5fd; border-color: #3730a3; }
+        .btn-dark { background: #e2e8f0; color: #1e293b; border-color: #cbd5e1; }
+        body.dark .btn-dark { background: #334155; color: #f1f5f9; border-color: #475569; }
+        .data-menu { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--bg-app); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 99; width: 200px; }
+        .data-menu.show { display: block; }
+        .data-menu button { display: block; width: 100%; padding: 6px 0; border: none; background: transparent; color: var(--text-secondary); font-size: 13px; cursor: pointer; border-radius: 4px; }
+        .data-menu button:hover { background: var(--bg-card); }
+        .data-menu textarea { width: 100%; height: 60px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; background: var(--bg-card); color: var(--text-secondary); }
+        @media (max-width:400px) { .header h1 { font-size:16px; } .q-text { font-size:14px; } .option-item { padding:8px 12px; font-size:13px; } .subject-tab { padding:4px 12px; font-size:12px; } .type-btn { font-size:10px; padding:3px 10px; } .grid-item { width: 26px; height: 26px; font-size: 10px; } }
+        @media (min-width:600px) { #app { border-radius:16px; margin:16px auto; min-height:calc(100vh - 32px); box-shadow:0 10px 30px rgba(0,0,0,0.08); } body { padding:0 16px; } }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="header">
+        <div class="header-top">
+            <h1>📖 刷题宝 <span>· 完整版</span></h1>
+            <span class="progress-text" id="progressText">0 / 0</span>
+        </div>
+    </div>
+    <div class="toolbar" id="toolbar">
+        <button class="btn-sm" id="modeToggle">📖 学习模式 (关)</button>
+        <button class="btn-sm danger" id="wrongToggle">❌ 错题本</button>
+        <button class="btn-sm btn-shuffle" id="shuffleBtn">🎲 随机</button>
+        <button class="btn-sm btn-dark" id="darkToggle">🌙 夜间</button>
+        <span id="modeBadge" class="study-mode-badge" style="display:none;">📖 学习中</span>
+    </div>
+    <div class="subject-tabs" id="subjectTabs"></div>
+    <div class="type-filters" id="typeFilters"></div>
+    <div class="question-area" id="questionArea"></div>
+</div>
+<script>
+// ================================================================
+// 完整题库（包含全部五科，所有题目）
+// ================================================================
+// ================================================================
+// 题库（运行时从本地导入；题库文件私有保存，不随框架一起发布）
+// 结构：{ PASSAGES:{...}, DATA:{ '科目':{ types:{ '题型':[题目,...] } } } }
+// ================================================================
+let PASSAGES = {};
+let DATA = {};
+const QBANK_KEY = 'shuatibao_qbank_v1';
+
+// 从本地存储恢复已导入的题库；成功返回 true
+function loadQBank() {
+    let raw;
+    try { raw = localStorage.getItem(QBANK_KEY); } catch (e) { return false; }
+    if (!raw) return false;
+    try {
+        const o = JSON.parse(raw);
+        if (!o || typeof o.DATA !== 'object') return false;
+        DATA = o.DATA; PASSAGES = o.PASSAGES || {};
+        return true;
+    } catch (e) { return false; }
+}
+function hasQBank() { return DATA && Object.keys(DATA).length > 0; }
+
+// 导入题库文本（JSON）；成功返回 null，失败返回错误说明
+function importQBank(text) {
+    let o;
+    try { o = JSON.parse(text); } catch (e) { return '文件格式不对：不是有效的题库文件（应为 .json）'; }
+    if (!o || typeof o.DATA !== 'object' || Object.keys(o.DATA).length === 0) {
+        return '题库文件里没有找到题目数据';
+    }
+    try { localStorage.setItem(QBANK_KEY, JSON.stringify(o)); }
+    catch (e) { return '保存失败：设备存储空间可能不足'; }
+    DATA = o.DATA; PASSAGES = o.PASSAGES || {};
+    return null;
+}
+// 弹出文件选择器导入题库
+function pickQBankFile() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.json,application/json,text/plain';
+    inp.addEventListener('change', function () {
+        const f = inp.files && inp.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = function () { applyImport(String(r.result)); };
+        r.onerror = function () { alert('读取文件失败，请重试'); };
+        r.readAsText(f, 'utf-8');
+    });
+    inp.click();
+}
+// 应用导入的题库文本并刷新界面
+function applyImport(text) {
+    const err = importQBank(text);
+    if (err) { alert(err); return; }
+    state.subjects = Object.keys(DATA);
+    state.currentSubject = state.subjects[0];
+    state.currentType = getTypes(state.currentSubject)[0] || null;
+    state.currentIndex = 0;
+    let n = 0; for (const s in DATA) for (const t in DATA[s].types) n += DATA[s].types[t].length;
+    alert('题库导入成功！共 ' + state.subjects.length + ' 个科目、' + n + ' 道题。');
+    render();
+}
+
+// ================================================================
+// STATE
+// ================================================================
+const state = {
+    subjects: Object.keys(DATA),
+    currentSubject: Object.keys(DATA)[0],
+    currentType: null,
+    currentIndex: 0,
+    answers: {},
+    showExplanation: {},
+    showTranslation: {},
+    studyMode: false,
+    wrongOnly: false,
+    shuffled: false,
+    shuffledIndices: {},
+    darkMode: false
+};
+
+// ================================================================
+// 进度持久化（localStorage 自动保存/恢复）
+// ================================================================
+const STORAGE_KEY = 'shuatibao_v1';
+// 需要记忆的字段（其余如 subjects 由题库派生，不持久化）
+const PERSIST_FIELDS = ['answers', 'showExplanation', 'showTranslation',
+    'currentSubject', 'currentType', 'currentIndex',
+    'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode'];
+
+function serializeState() {
+    const o = {};
+    PERSIST_FIELDS.forEach(k => { o[k] = state[k]; });
+    return o;
+}
+function saveState() {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+    } catch (e) { /* 隐私模式/容量满等情况静默忽略 */ }
+}
+function loadState() {
+    let raw;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+    if (!raw) return;
+    let saved;
+    try { saved = JSON.parse(raw); } catch (e) { return; }
+    if (!saved || typeof saved !== 'object') return;
+    PERSIST_FIELDS.forEach(k => { if (saved[k] !== undefined) state[k] = saved[k]; });
+}
+// 题库可能变动：把恢复后的当前位置校正到合法范围，避免脏数据导致空白
+function applyStateValidation() {
+    if (!state.subjects || state.subjects.length === 0) return; // 还没导入题库
+    if (!state.subjects.includes(state.currentSubject)) {
+        state.currentSubject = state.subjects[0];
+    }
+    const types = getTypes(state.currentSubject);
+    if (!state.currentType || !types.includes(state.currentType)) {
+        state.currentType = types.length > 0 ? types[0] : null;
+    }
+    const qs = getFilteredQuestions(state.currentSubject, state.currentType);
+    if (!Number.isInteger(state.currentIndex) || state.currentIndex < 0 || state.currentIndex >= qs.length) {
+        state.currentIndex = 0;
+    }
+}
+
+// ================================================================
+// 辅助函数
+// ================================================================
+// 把题库条目展开为渲染用对象：补 _type，并把 passageRef 解析回完整原文/译文（阅读题原文已去重存于 PASSAGES）
+function expandQuestion(item, type) {
+    const q = Object.assign({ _type: type }, item);
+    if (q.passageRef && PASSAGES[q.passageRef]) {
+        q.passage = PASSAGES[q.passageRef].text;
+        q.passage_translation = PASSAGES[q.passageRef].translation;
+    }
+    return q;
+}
+function getTypeQuestions(subject, type) {
+    const types = DATA[subject].types;
+    if (!types[type]) return [];
+    const items = types[type];
+    if (Array.isArray(items)) {
+        return items.map(item => expandQuestion(item, type));
+    }
+    return [];
+}
+function getTypes(subject) { return Object.keys(DATA[subject].types); }
+function getAllQuestions(subject) {
+    let all = [];
+    const types = DATA[subject].types;
+    for (let t in types) {
+        const items = types[t];
+        if (Array.isArray(items)) {
+            items.forEach(item => all.push(expandQuestion(item, t)));
+        }
+    }
+    return all;
+}
+function getTotalQuestions(subject) {
+    let count = 0;
+    const types = DATA[subject].types;
+    for (let t in types) {
+        const items = types[t];
+        if (Array.isArray(items)) count += items.length;
+    }
+    return count;
+}
+function getAnsweredCount(subject) {
+    let count = 0;
+    const all = getAllQuestions(subject);
+    for (let q of all) {
+        const key = subject + '-' + q._type + '-' + q.id;
+        if (state.answers[key] && state.answers[key] !== '') count++;
+    }
+    return count;
+}
+function getCorrectCount(subject) {
+    let count = 0;
+    const all = getAllQuestions(subject);
+    for (let q of all) {
+        const key = subject + '-' + q._type + '-' + q.id;
+        const ans = state.answers[key];
+        if (ans && ans === q.answer) count++;
+    }
+    return count;
+}
+function isWrong(subject, type, id) {
+    const key = subject + '-' + type + '-' + id;
+    const ans = state.answers[key];
+    if (!ans) return false;
+    const qs = getTypeQuestions(subject, type);
+    const q = qs.find(item => item.id === id);
+    if (!q) return false;
+    return ans !== q.answer;
+}
+function getFilteredQuestions(subject, type) {
+    let qs = getTypeQuestions(subject, type);
+    if (state.wrongOnly) {
+        qs = qs.filter(q => isWrong(subject, type, q.id));
+    }
+    const key = subject + '-' + type;
+    if (state.shuffled && state.shuffledIndices[key]) {
+        const order = state.shuffledIndices[key];
+        const map = {};
+        qs.forEach(q => map[q.id] = q);
+        const newQs = [];
+        for (let id of order) {
+            if (map[id]) newQs.push(map[id]);
+        }
+        qs.forEach(q => { if (!newQs.includes(q)) newQs.push(q); });
+        return newQs;
+    }
+    return qs;
+}
+function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+function reshuffleCurrent() {
+    const subject = state.currentSubject;
+    const type = state.currentType;
+    if (!type) return;
+    const qs = getTypeQuestions(subject, type);
+    const ids = qs.map(q => q.id);
+    const shuffledIds = shuffleArray([...ids]);
+    const key = subject + '-' + type;
+    state.shuffledIndices[key] = shuffledIds;
+    state.shuffled = true;
+    state.currentIndex = 0;
+    render();
+}
+function isTranslationShown(subject, type, id) {
+    const key = subject + '-' + type + '-' + id;
+    return !!state.showTranslation[key];
+}
+function toggleTranslation(subject, type, id) {
+    const key = subject + '-' + type + '-' + id;
+    state.showTranslation[key] = !state.showTranslation[key];
+    render();
+}
+function getAnswer(subject, type, id) {
+    const key = subject + '-' + type + '-' + id;
+    return state.answers[key] || '';
+}
+function setAnswer(subject, type, id, val) {
+    const key = subject + '-' + type + '-' + id;
+    state.answers[key] = val;
+}
+function isExplanationShown(subject, type, id) {
+    const key = subject + '-' + type + '-' + id;
+    return !!state.showExplanation[key];
+}
+function toggleExplanation(subject, type, id) {
+    const key = subject + '-' + type + '-' + id;
+    state.showExplanation[key] = !state.showExplanation[key];
+}
+function updateProgress() {
+    const total = getTotalQuestions(state.currentSubject);
+    const answered = getAnsweredCount(state.currentSubject);
+    document.getElementById('progressText').textContent = `${answered} / ${total}`;
+}
+function updateToolbar() {
+    const modeBtn = document.getElementById('modeToggle');
+    const wrongBtn = document.getElementById('wrongToggle');
+    const darkBtn = document.getElementById('darkToggle');
+    const badge = document.getElementById('modeBadge');
+    if (state.studyMode) {
+        modeBtn.textContent = '📖 学习模式 (开)';
+        modeBtn.classList.add('active');
+        badge.style.display = 'inline-block';
+    } else {
+        modeBtn.textContent = '📖 学习模式 (关)';
+        modeBtn.classList.remove('active');
+        badge.style.display = 'none';
+    }
+    if (state.wrongOnly) {
+        wrongBtn.classList.add('active');
+        wrongBtn.textContent = '❌ 错题本 (开)';
+    } else {
+        wrongBtn.classList.remove('active');
+        wrongBtn.textContent = '❌ 错题本';
+    }
+    if (state.darkMode) {
+        document.body.classList.add('dark');
+        darkBtn.textContent = '☀️ 白天';
+    } else {
+        document.body.classList.remove('dark');
+        darkBtn.textContent = '🌙 夜间';
+    }
+}
+
+// ================================================================
+// 核心渲染函数（包含所有事件绑定）
+// ================================================================
+function render() {
+    if (!hasQBank()) { renderImportScreen(); saveState(); return; }
+    renderSubjectTabs();
+    renderTypeFilters();
+    renderQuestion();
+    updateProgress();
+    updateToolbar();
+    saveState();
+}
+
+// 还没导入题库时显示的引导界面
+function renderImportScreen() {
+    document.getElementById('subjectTabs').innerHTML = '';
+    document.getElementById('typeFilters').innerHTML = '';
+    document.getElementById('progressText').textContent = '未导入题库';
+    const area = document.getElementById('questionArea');
+    area.innerHTML = `
+        <div class="empty-state">
+            <div class="icon">📚</div>
+            <div style="font-weight:600;font-size:16px;margin-bottom:6px;color:var(--text-primary);">还没有导入题库</div>
+            <div style="font-size:13px;line-height:1.8;margin-bottom:18px;">
+                这是刷题框架，题库需要你自己导入。<br>题库只会存在你这台设备上，<b>不会上传到网上</b>。<br>
+                点下面按钮，选择你的 <b>刷题宝-题库.json</b> 文件。
+            </div>
+            <button class="nav-btn next" id="importQBankBtn" style="max-width:240px;margin:0 auto 16px;">📥 选择题库文件导入</button>
+            <details style="text-align:left;font-size:12px;color:var(--text-muted);max-width:320px;margin:0 auto;">
+                <summary style="cursor:pointer;">手机里选不到文件？点这里改用「粘贴」</summary>
+                <textarea id="qbankPaste" placeholder="把题库文件的全部内容粘贴到这里" style="width:100%;height:90px;margin-top:8px;border:1px solid var(--border-color);border-radius:6px;padding:6px;background:var(--bg-card);color:var(--text-secondary);font-size:11px;"></textarea>
+                <button class="toggle-answer-btn" id="qbankPasteBtn" style="margin-top:6px;">粘贴导入</button>
+            </details>
+        </div>
+    `;
+    document.getElementById('importQBankBtn').addEventListener('click', pickQBankFile);
+    document.getElementById('qbankPasteBtn')?.addEventListener('click', function () {
+        const v = (document.getElementById('qbankPaste').value || '').trim();
+        if (!v) { alert('请先粘贴题库内容'); return; }
+        applyImport(v);
+    });
+}
+
+function renderSubjectTabs() {
+    const container = document.getElementById('subjectTabs');
+    container.innerHTML = state.subjects.map(s =>
+        `<button class="subject-tab ${s === state.currentSubject ? 'active' : ''}" data-subject="${s}">${s}</button>`
+    ).join('');
+    container.querySelectorAll('.subject-tab').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const subject = this.dataset.subject;
+            if (subject !== state.currentSubject) {
+                state.currentSubject = subject;
+                const types = getTypes(subject);
+                state.currentType = types.length > 0 ? types[0] : null;
+                state.currentIndex = 0;
+                render();
+            }
+        });
+    });
+}
+
+function renderTypeFilters() {
+    const container = document.getElementById('typeFilters');
+    const types = getTypes(state.currentSubject);
+    if (types.length === 0) { container.innerHTML = ''; return; }
+    if (!types.includes(state.currentType)) state.currentType = types[0];
+    container.innerHTML = types.map(t =>
+        `<button class="type-btn ${t === state.currentType ? 'active' : ''}" data-type="${t}">${t}</button>`
+    ).join('');
+    container.querySelectorAll('.type-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const type = this.dataset.type;
+            if (type !== state.currentType) {
+                state.currentType = type;
+                state.currentIndex = 0;
+                render();
+            }
+        });
+    });
+}
+
+function renderQuestion() {
+    const area = document.getElementById('questionArea');
+    const questions = getFilteredQuestions(state.currentSubject, state.currentType);
+    if (!questions || questions.length === 0) {
+        let msg = state.wrongOnly ? '🎉 错题本为空，继续加油！' : '该题型暂无题目';
+        area.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>${msg}</p></div>`;
+        return;
+    }
+    if (state.currentIndex >= questions.length) state.currentIndex = 0;
+    if (state.currentIndex < 0) state.currentIndex = questions.length - 1;
+
+    const q = questions[state.currentIndex];
+    const total = questions.length;
+    const idx = state.currentIndex + 1;
+    const selected = getAnswer(state.currentSubject, state.currentType, q.id);
+    const showExp = isExplanationShown(state.currentSubject, state.currentType, q.id) || state.studyMode;
+    if (state.studyMode) {
+        const key = state.currentSubject + '-' + state.currentType + '-' + q.id;
+        state.showExplanation[key] = true;
+    }
+    const showTrans = isTranslationShown(state.currentSubject, state.currentType, q.id);
+
+    // ---- 答题卡 ----
+    let gridHtml = `<div class="grid-container"><div class="grid-title"><span>📊 答题卡</span><span>灰=未做 蓝=已答 绿=正确 红=错误</span></div><div class="grid">`;
+    questions.forEach((item, i) => {
+        const isCurrent = (i === state.currentIndex);
+        const ans = getAnswer(state.currentSubject, state.currentType, item.id);
+        let cls = 'grid-item';
+        if (isCurrent) cls += ' current';
+        if (ans) {
+            const isCorrect = (ans === item.answer);
+            if (isCorrect) cls += ' correct';
+            else cls += ' wrong';
+        } else {
+            cls += ' answered';
+        }
+        gridHtml += `<div class="${cls}" data-idx="${i}">${i+1}</div>`;
+    });
+    gridHtml += `</div></div>`;
+    area.innerHTML = gridHtml;
+
+    // ---- 题目主体 ----
+    let html = ``;
+
+    // 阅读理解每道题都显示文章
+    if (q.passage) {
+        html += `<div class="passage-box"><div class="p-title">📄 阅读文章</div>${q.passage.replace(/\n/g, '<br>')}</div>`;
+    }
+
+    html += `
+        <div class="q-header">
+            <span class="q-number">${idx} / ${total}</span>
+            <span class="q-type-badge">${q._type}</span>
+            ${state.studyMode ? '<span class="study-mode-badge">📖 学习模式</span>' : ''}
+        </div>
+    `;
+
+    let qText = q.question.replace(/\n/g, '<br>');
+    html += `<div class="q-text">${qText}</div>`;
+
+    // 翻译按钮（含文章翻译）
+    if (state.currentSubject === '大学英语') {
+        let hasTrans = !!(q.translation || q.options_translation || q.passage_translation);
+        if (hasTrans) {
+            html += `
+                <div style="margin-bottom:8px;">
+                    <button class="btn-sm btn-trans" id="transBtn">${showTrans ? '🌐 隐藏翻译' : '🌐 翻译'}</button>
+                </div>
+                <div class="translation-box ${showTrans ? 'show' : ''}">
+                    ${q.passage_translation ? `<div><span class="t-label">📄 文章：</span>${q.passage_translation.replace(/\n/g, '<br>')}</div>` : ''}
+                    ${q.translation ? `<div style="margin-top:4px;"><span class="t-label">📝 题目：</span>${q.translation}</div>` : ''}
+                    ${q.options_translation ? `<div style="margin-top:4px;"><span class="t-label">🔘 选项：</span></div>` : ''}
+                    ${q.options_translation ? q.options_translation.map((t, i) => `<div class="trans-option">${String.fromCharCode(65+i)}. ${t}</div>`).join('') : ''}
+                </div>
+            `;
+        }
+    }
+
+    const type = q._type;
+    if (type === '判断题') {
+        const judgeOptions = ['正确', '错误'];
+        const labelChars = ['A', 'B'];
+        html += `<div class="options">`;
+        judgeOptions.forEach((opt, i) => {
+            const label = labelChars[i];
+            const isSelected = (selected === opt);
+            const isCorrect = (q.answer === opt);
+            let cls = 'option-item';
+            if (isSelected) cls += ' selected';
+            if (showExp || state.studyMode) {
+                if (isCorrect) cls += ' correct';
+                else if (isSelected && !isCorrect) cls += ' wrong';
+            }
+            if (state.studyMode) cls += ' disabled';
+            const checkMark = isSelected ? '✅' : '';
+            html += `
+                <div class="${cls}" data-opt="${opt}" data-idx="${i}">
+                    <span class="label">${label}.</span>
+                    <span class="text">${opt}</span>
+                    ${checkMark ? `<span class="check-mark">${checkMark}</span>` : ''}
+                    ${state.studyMode && isCorrect ? ' ✅' : ''}
+                </div>
+            `;
+        });
+        html += `</div>`;
+    } else if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+        const isMulti = type.includes('多选') || type === '多选题';
+        const isCloze = (type === '选词填空');
+        const gridClass = isCloze ? 'options-grid' : 'options';
+        html += `<div class="${gridClass}">`;
+        const labelChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        q.options.forEach((opt, i) => {
+            const label = labelChars[i] || '?';
+            const isSelected = selected && (isMulti ? selected.includes(label) : selected === label);
+            const isCorrect = q.answer.includes(label);
+            let cls = 'option-item';
+            if (isSelected) cls += ' selected';
+            if (showExp || state.studyMode) {
+                if (isCorrect) cls += ' correct';
+                else if (isSelected && !isCorrect) cls += ' wrong';
+            }
+            if (state.studyMode) cls += ' disabled';
+            const checkMark = isSelected ? '✅' : '';
+            const cleanText = opt.replace(/^[A-Z]\)\s*/, '');
+            html += `
+                <div class="${cls}" data-opt="${label}" data-idx="${i}">
+                    <span class="label">${label}.</span>
+                    <span class="text">${cleanText}</span>
+                    ${checkMark ? `<span class="check-mark">${checkMark}</span>` : ''}
+                    ${state.studyMode && isCorrect ? ' ✅' : ''}
+                </div>
+            `;
+        });
+        html += `</div>`;
+        if (isMulti) {
+            html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">💡 多选题，请选择所有正确答案</div>`;
+        }
+    } else {
+        html += `<div class="essay-box" style="background:var(--bg-card);padding:12px 14px;border-radius:10px;border:1px solid var(--border-color);margin-bottom:10px;">`;
+        if (type === '填空题') {
+            if (showExp || state.studyMode) {
+                html += `<div style="font-size:14px;color:var(--text-secondary);">答案：<span class="blank-answer">${q.answer}</span></div>`;
+            } else {
+                html += `<div style="font-size:14px;color:var(--text-muted);">点击下方"显示答案"查看</div>`;
+            }
+        } else {
+            if (showExp || state.studyMode) {
+                html += `<div style="font-size:14px;line-height:1.7;color:var(--text-secondary);white-space:pre-wrap;">${q.answer}</div>`;
+            } else {
+                html += `<div style="font-size:14px;color:var(--text-muted);">点击下方"显示答案"查看参考答案</div>`;
+            }
+        }
+        html += `</div>`;
+    }
+
+    if (q.explanation) {
+        html += `
+            <div class="explanation ${(showExp || state.studyMode) ? 'show' : ''}">
+                <div class="title">📖 解析</div>
+                <div class="content">${q.explanation}</div>
+            </div>
+        `;
+    }
+
+    if (!state.studyMode) {
+        html += `
+            <div class="flex-row" style="margin-top:10px;gap:6px;flex-wrap:wrap;">
+                <button class="toggle-answer-btn ${showExp ? 'active' : ''}" id="toggleAnswerBtn">${showExp ? '隐藏答案' : '显示答案'}</button>
+                ${(q.options && q.options.length > 0) || type === '判断题' ? `<button class="toggle-answer-btn" id="resetAnswerBtn" style="background:#fee2e2;color:#b91c1c;">重置</button>` : ''}
+            </div>
+        `;
+    } else {
+        html += `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">📖 学习模式中，答案已显示，点击无效</div>`;
+    }
+
+    html += `
+        <div class="nav-area">
+            <button class="nav-btn prev" id="prevBtn" ${state.currentIndex === 0 ? 'disabled' : ''}>⬅ 上一题</button>
+            <button class="nav-btn next" id="nextBtn" ${state.currentIndex === total - 1 ? 'disabled' : ''}>下一题 ➔</button>
+        </div>
+    `;
+
+    const totalQ = getTotalQuestions(state.currentSubject);
+    const answeredCount = getAnsweredCount(state.currentSubject);
+    const correctCount = getCorrectCount(state.currentSubject);
+    const wrongCount = answeredCount - correctCount;
+    html += `
+        <div class="stats-bar" id="statsBar">
+            <div class="stat-item" id="statTotal">📊 总题 <span class="num blue">${totalQ}</span></div>
+            <div class="stat-item" id="statAnswered">✅ 已答 <span class="num green">${answeredCount}</span></div>
+            <div class="stat-item" id="statWrong">❌ 错题 <span class="num red">${wrongCount}</span></div>
+            <div class="stat-item" id="statRate">📈 正确率 <span class="num blue">${totalQ > 0 ? Math.round(correctCount / Math.max(answeredCount, 1) * 100) : 0}%</span></div>
+            <div class="data-menu" id="dataMenu">
+                <button id="exportData">📤 导出进度</button>
+                <button id="importData">📥 导入进度</button>
+                <textarea id="dataInput" placeholder="粘贴导出的密文"></textarea>
+                <button id="confirmImport" style="background:#4f46e5;color:#fff;margin-top:4px;">确认导入</button>
+                <button id="menuImportQBank" style="margin-top:4px;">📚 导入/更换题库</button>
+                <button id="resetAllData" style="color:#ef4444;margin-top:4px;">🗑️ 重置所有进度</button>
+            </div>
+        </div>
+    `;
+
+    area.innerHTML += html;
+
+    // ===== 事件绑定 =====
+    // 答题卡
+    area.querySelectorAll('.grid-item').forEach(el => {
+        el.addEventListener('click', function() {
+            const idx = parseInt(this.dataset.idx);
+            if (!isNaN(idx)) {
+                state.currentIndex = idx;
+                render();
+            }
+        });
+    });
+
+    // 选项
+    if (!state.studyMode) {
+        area.querySelectorAll('.option-item:not(.disabled)').forEach(el => {
+            el.addEventListener('click', function() {
+                if (this.classList.contains('disabled')) return;
+                const opt = this.dataset.opt;
+                const isMulti = (type.includes('多选') || type === '多选题');
+                const isJudge = (type === '判断题');
+                if (isJudge) {
+                    setAnswer(state.currentSubject, state.currentType, q.id, opt);
+                    const expKey = state.currentSubject + '-' + state.currentType + '-' + q.id;
+                    state.showExplanation[expKey] = true;
+                    render();
+                } else if (isMulti) {
+                    const current = state.answers[state.currentSubject + '-' + state.currentType + '-' + q.id] || '';
+                    let parts = current ? current.split('') : [];
+                    if (parts.includes(opt)) {
+                        parts = parts.filter(p => p !== opt);
+                    } else {
+                        parts.push(opt);
+                    }
+                    parts.sort();
+                    setAnswer(state.currentSubject, state.currentType, q.id, parts.join(''));
+                    const expKey = state.currentSubject + '-' + state.currentType + '-' + q.id;
+                    state.showExplanation[expKey] = true;
+                    render();
+                } else {
+                    setAnswer(state.currentSubject, state.currentType, q.id, opt);
+                    const expKey = state.currentSubject + '-' + state.currentType + '-' + q.id;
+                    state.showExplanation[expKey] = true;
+                    render();
+                }
+            });
+        });
+
+        document.getElementById('toggleAnswerBtn')?.addEventListener('click', () => {
+            toggleExplanation(state.currentSubject, state.currentType, q.id);
+            render();
+        });
+        document.getElementById('resetAnswerBtn')?.addEventListener('click', () => {
+            const key = state.currentSubject + '-' + state.currentType + '-' + q.id;
+            delete state.answers[key];
+            render();
+        });
+    }
+
+    // 翻译
+    document.getElementById('transBtn')?.addEventListener('click', () => {
+        toggleTranslation(state.currentSubject, state.currentType, q.id);
+    });
+
+    // 导航
+    document.getElementById('prevBtn')?.addEventListener('click', () => {
+        if (state.currentIndex > 0) {
+            state.currentIndex--;
+            render();
+        }
+    });
+    document.getElementById('nextBtn')?.addEventListener('click', () => {
+        const questions = getFilteredQuestions(state.currentSubject, state.currentType);
+        if (state.currentIndex < questions.length - 1) {
+            state.currentIndex++;
+            render();
+        }
+    });
+
+    // 数据菜单
+    const statsBar = document.getElementById('statsBar');
+    const dataMenu = document.getElementById('dataMenu');
+    if (statsBar) {
+        statsBar.addEventListener('click', function(e) {
+            if (e.target.closest('.data-menu')) return;
+            dataMenu.classList.toggle('show');
+        });
+    }
+    document.getElementById('exportData')?.addEventListener('click', function() {
+        const data = JSON.stringify(serializeState());
+        const encoded = btoa(encodeURIComponent(data));
+        prompt('复制以下密文保存到备忘录（换设备时用于恢复全部进度）：', encoded);
+    });
+    document.getElementById('importData')?.addEventListener('click', function() {
+        document.getElementById('dataInput').style.display = 'block';
+        document.getElementById('confirmImport').style.display = 'block';
+    });
+    document.getElementById('confirmImport')?.addEventListener('click', function() {
+        const val = document.getElementById('dataInput').value.trim();
+        if (!val) return alert('请粘贴密文');
+        try {
+            const decoded = decodeURIComponent(atob(val));
+            const parsed = JSON.parse(decoded);
+            if (parsed && parsed.answers) {
+                // 新格式：完整进度
+                PERSIST_FIELDS.forEach(k => { if (parsed[k] !== undefined) state[k] = parsed[k]; });
+            } else {
+                // 旧格式：仅答题记录
+                state.answers = parsed;
+            }
+            applyStateValidation();
+            alert('导入成功！');
+            dataMenu.classList.remove('show');
+            render();
+        } catch(e) {
+            alert('密文无效，请重新复制');
+        }
+    });
+    document.getElementById('menuImportQBank')?.addEventListener('click', function() {
+        dataMenu.classList.remove('show');
+        pickQBankFile();
+    });
+    document.getElementById('resetAllData')?.addEventListener('click', function() {
+        if (confirm('确定要重置所有科目的答题进度吗？此操作不可撤销！')) {
+            state.answers = {};
+            state.showExplanation = {};
+            state.showTranslation = {};
+            state.shuffledIndices = {};
+            state.shuffled = false;
+            render();
+            alert('已重置所有进度');
+        }
+    });
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.stats-bar')) {
+            if (dataMenu) dataMenu.classList.remove('show');
+        }
+    });
+
+    updateProgress();
+}
+
+// ================================================================
+// 初始化
+// ================================================================
+function init() {
+    // 0) 先从本地恢复已导入的题库（没有则进导入引导页）
+    loadQBank();
+    state.subjects = Object.keys(DATA);
+    // 1) 设默认位置
+    const firstSubject = state.subjects[0];
+    state.currentSubject = firstSubject;
+    const types = firstSubject ? getTypes(firstSubject) : [];
+    state.currentType = types.length > 0 ? types[0] : null;
+    state.currentIndex = 0;
+    // 2) 用上次保存的进度覆盖默认值，再校正合法性
+    loadState();
+    applyStateValidation();
+    render();
+
+    document.getElementById('modeToggle').addEventListener('click', function() {
+        state.studyMode = !state.studyMode;
+        render();
+    });
+    document.getElementById('wrongToggle').addEventListener('click', function() {
+        state.wrongOnly = !state.wrongOnly;
+        state.currentIndex = 0;
+        render();
+    });
+    document.getElementById('shuffleBtn').addEventListener('click', function() {
+        reshuffleCurrent();
+    });
+    document.getElementById('darkToggle').addEventListener('click', function() {
+        state.darkMode = !state.darkMode;
+        render();
+    });
+}
+
+init();
+
+// PWA：注册 Service Worker（仅在 http(s) 下生效，本地 file:// 会静默跳过）
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('service-worker.js').catch(function() {});
+    });
+}
+</script>
+</body>
+</html>
