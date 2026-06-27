@@ -26,26 +26,28 @@
             --header-gradient: linear-gradient(135deg, #1e1b4b, #4c1d95); --tag-bg: #475569;
         }
         * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg-body); color: var(--text-primary); padding: 0 0 80px 0; min-height: 100vh; display: flex; justify-content: center; transition: background 0.3s, color 0.3s; }
-        #app { max-width: 480px; width: 100%; background: var(--bg-app); min-height: 100vh; box-shadow: var(--shadow); position: relative; transition: background 0.3s; }
-        .header { background: var(--header-gradient); color: #fff; padding: 14px 16px 10px; position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 12px rgba(79,70,229,0.3); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg-body); color: var(--text-primary); padding: 0 env(safe-area-inset-right) calc(80px + env(safe-area-inset-bottom)) env(safe-area-inset-left); min-height: 100vh; min-height: 100dvh; display: flex; justify-content: center; transition: background 0.3s, color 0.3s; }
+        #app { max-width: 480px; width: 100%; background: var(--bg-app); min-height: 100vh; min-height: 100dvh; box-shadow: var(--shadow); position: relative; transition: background 0.3s; }
+        .topnav { position: sticky; top: 0; z-index: 20; background: var(--bg-app); }
+        .header { background: var(--header-gradient); color: #fff; padding: calc(14px + env(safe-area-inset-top)) 16px 10px; box-shadow: 0 2px 12px rgba(79,70,229,0.3); }
         .header-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; }
         .header h1 { font-size: 18px; font-weight: 700; }
         .header h1 span { font-weight: 400; opacity: 0.85; font-size: 12px; }
         .progress-text { font-size: 12px; background: rgba(255,255,255,0.2); padding: 3px 12px; border-radius: 20px; font-weight: 500; }
-        .toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 4px; background: var(--bg-card); border-bottom: 1px solid var(--border-color); position: sticky; top: 60px; z-index: 10; transition: background 0.3s; }
-        .toolbar .btn-sm { padding: 4px 12px; border-radius: 14px; border: 1px solid var(--border-color); background: var(--bg-app); font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
+        .toolbar { display: flex; flex-wrap: nowrap; gap: 6px; padding: 8px 12px; background: var(--bg-card); border-bottom: 1px solid var(--border-color); overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; transition: background 0.3s; }
+        .toolbar::-webkit-scrollbar { display: none; }
+        .toolbar .btn-sm { flex: 0 0 auto; white-space: nowrap; padding: 6px 14px; border-radius: 14px; border: 1px solid var(--border-color); background: var(--bg-app); font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
         .toolbar .btn-sm:active { transform: scale(0.94); }
         .toolbar .btn-sm.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
         .toolbar .btn-sm.danger { border-color: #fca5a5; color: #b91c1c; }
         .toolbar .btn-sm.danger.active { background: #ef4444; color: #fff; border-color: #ef4444; }
-        .subject-tabs { display: flex; gap: 6px; padding: 8px 12px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: var(--bg-app); border-bottom: 1px solid var(--border-color); position: sticky; top: 98px; z-index: 10; transition: background 0.3s; }
+        .subject-tabs { display: flex; gap: 6px; padding: 8px 12px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: var(--bg-app); border-bottom: 1px solid var(--border-color); transition: background 0.3s; }
         .subject-tabs::-webkit-scrollbar { display: none; }
-        .subject-tab { flex: 0 0 auto; padding: 5px 14px; border-radius: 16px; font-size: 13px; font-weight: 500; background: var(--tag-bg); color: var(--text-muted); border: none; cursor: pointer; transition: all 0.25s; white-space: nowrap; touch-action: manipulation; }
+        .subject-tab { flex: 0 0 auto; padding: 7px 16px; border-radius: 16px; font-size: 13px; font-weight: 500; background: var(--tag-bg); color: var(--text-muted); border: none; cursor: pointer; transition: all 0.25s; white-space: nowrap; touch-action: manipulation; }
         .subject-tab.active { background: #4f46e5; color: #fff; box-shadow: 0 2px 8px rgba(79,70,229,0.3); }
-        .type-filters { display: flex; gap: 6px; padding: 6px 12px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: var(--bg-app); border-bottom: 1px solid var(--border-color); position: sticky; top: 138px; z-index: 10; transition: background 0.3s; }
+        .type-filters { display: flex; gap: 6px; padding: 6px 12px 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; background: var(--bg-app); border-bottom: 1px solid var(--border-color); transition: background 0.3s; }
         .type-filters::-webkit-scrollbar { display: none; }
-        .type-btn { flex: 0 0 auto; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 500; background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
+        .type-btn { flex: 0 0 auto; padding: 6px 13px; border-radius: 12px; font-size: 12px; font-weight: 500; background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
         .type-btn.active { background: #eef2ff; color: #4f46e5; border-color: #4f46e5; }
         body.dark .type-btn.active { background: #3730a3; color: #a5b4fc; border-color: #4f46e5; }
         .question-area { padding: 12px 16px 20px; }
@@ -126,7 +128,7 @@
         body.dark .btn-trans { background: #1e3a8a; color: #93c5fd; border-color: #3730a3; }
         .btn-dark { background: #e2e8f0; color: #1e293b; border-color: #cbd5e1; }
         body.dark .btn-dark { background: #334155; color: #f1f5f9; border-color: #475569; }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 18px 12px; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: calc(18px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left)); }
         .overlay-card { background: var(--bg-app); color: var(--text-primary); width: 100%; max-width: 460px; border-radius: 14px; padding: 18px 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
         .overlay-card h2 { font-size: 17px; margin-bottom: 10px; }
         .ov-close { float: right; cursor: pointer; font-size: 20px; color: var(--text-muted); line-height: 1; }
@@ -142,11 +144,25 @@
         .data-menu button:hover { background: var(--bg-card); }
         .data-menu textarea { width: 100%; height: 60px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 4px; padding: 4px; background: var(--bg-card); color: var(--text-secondary); }
         @media (max-width:400px) { .header h1 { font-size:16px; } .q-text { font-size:14px; } .option-item { padding:8px 12px; font-size:13px; } .subject-tab { padding:4px 12px; font-size:12px; } .type-btn { font-size:10px; padding:3px 10px; } .grid-item { width: 26px; height: 26px; font-size: 10px; } }
-        @media (min-width:600px) { #app { border-radius:16px; margin:16px auto; min-height:calc(100vh - 32px); box-shadow:0 10px 30px rgba(0,0,0,0.08); } body { padding:0 16px; } }
+        @media (min-width:600px) { #app { border-radius:16px; margin:16px auto; min-height:calc(100vh - 32px); min-height:calc(100dvh - 32px); box-shadow:0 10px 30px rgba(0,0,0,0.08); } body { padding:0 16px; } }
+        /* 数学排版：保留矩阵换行与对齐，不依赖外部库 */
+        .math { white-space: pre-wrap; font-family: "Cambria Math", "Latin Modern Math", "Times New Roman", "STIX Two Math", serif; font-size: 1.06em; line-height: 1.5; }
+        /* 英语生词标记 */
+        .word { cursor: pointer; }
+        .word.marked { background: #fef08a; color: #854d0e; border-radius: 3px; padding: 0 1px; box-shadow: inset 0 -2px 0 #eab308; }
+        body.dark .word.marked { background: #854d0e; color: #fde68a; box-shadow: inset 0 -2px 0 #eab308; }
+        /* 长答案/题干字号调节 */
+        body.fs-small .q-text, body.fs-small .essay-box, body.fs-small .explanation .content, body.fs-small .options .text, body.fs-small .passage-box { font-size: 13px; }
+        body.fs-large .q-text { font-size: 18px; }
+        body.fs-large .essay-box, body.fs-large .explanation .content, body.fs-large .options .text, body.fs-large .passage-box { font-size: 16px; }
+        .fontscale-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+        .fontscale-row button { flex: 1; padding: 6px 0; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-secondary); border-radius: 6px; font-size: 13px; cursor: pointer; }
+        .fontscale-row button.sel { background: #4f46e5; color: #fff; border-color: #4f46e5; }
     </style>
 </head>
 <body>
 <div id="app">
+  <div class="topnav">
     <div class="header">
         <div class="header-top">
             <h1>📖 刷题宝 <span>· 完整版</span></h1>
@@ -169,6 +185,7 @@
     </div>
     <div class="subject-tabs" id="subjectTabs"></div>
     <div class="type-filters" id="typeFilters"></div>
+  </div>
     <div class="question-area" id="questionArea"></div>
 </div>
 <script>
@@ -259,7 +276,9 @@ const state = {
     reviewPool: {},       // 强化错题队列：key -> 连续答对次数（满 REVIEW_GRAD 毕业）
     reviewMode: false,    // 强化错题模式
     studyDays: [],        // 打卡：['2026-06-27', ...]
-    exam: null            // 模考会话（见 startExam）
+    exam: null,           // 模考会话（见 startExam）
+    fontScale: 'normal',  // 字号：small|normal|large
+    vocab: {}             // 英语生词：{ 词(小写): true }
 };
 const REVIEW_GRAD = 2;    // 强化模式连续答对几次算掌握
 
@@ -271,7 +290,7 @@ const STORAGE_KEY = 'shuatibao_v1';
 const PERSIST_FIELDS = ['answers', 'showExplanation', 'showTranslation',
     'currentSubject', 'currentType', 'currentIndex',
     'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode',
-    'favorites', 'favOnly', 'reviewPool', 'studyDays', 'exam'];
+    'favorites', 'favOnly', 'reviewPool', 'studyDays', 'exam', 'fontScale', 'vocab'];
 
 function serializeState() {
     const o = {};
@@ -555,6 +574,47 @@ function updateProgress() {
     const answered = getAnsweredCount(state.currentSubject);
     document.getElementById('progressText').textContent = `${answered} / ${total}`;
 }
+
+// —— 字号 ——
+function applyFontScale() {
+    document.body.classList.remove('fs-small', 'fs-large');
+    if (state.fontScale === 'small') document.body.classList.add('fs-small');
+    else if (state.fontScale === 'large') document.body.classList.add('fs-large');
+}
+// —— 状态栏配色随夜间模式 ——
+function applyThemeColor() {
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', state.darkMode ? '#1e1b4b' : '#4f46e5');
+}
+// —— 英语生词 ——
+function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function markupEnglish(text) {
+    // 转义后把英文单词包成可点击 span（已标记的加 marked），非单词字符原样保留
+    return escapeHtml(text).replace(/[A-Za-z][A-Za-z'-]*/g, function (w) {
+        const marked = state.vocab[w.toLowerCase()] ? ' marked' : '';
+        return '<span class="word' + marked + '" data-w="' + w.toLowerCase() + '">' + w + '</span>';
+    });
+}
+function toggleVocab(w) { w = w.toLowerCase(); if (state.vocab[w]) delete state.vocab[w]; else state.vocab[w] = true; }
+function vocabCount() { return Object.keys(state.vocab).length; }
+function renderVocabBook() {
+    const words = Object.keys(state.vocab).sort();
+    let html = '<span class="ov-close" id="ovClose">✕</span><h2>📒 生词本（' + words.length + '）</h2>';
+    if (!words.length) {
+        html += '<div style="font-size:13px;color:var(--text-muted);">还没有生词。在「大学英语」的题干或阅读原文里点单词即可标记。</div>';
+    } else {
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">'
+            + words.map(w => `<span class="word marked" data-vw="${w}" style="cursor:pointer;">${w} ✕</span>`).join('') + '</div>';
+        html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">点词可移除</div>';
+        html += '<button class="toggle-answer-btn" id="vbClear" style="background:#fee2e2;color:#b91c1c;">清空生词本</button>';
+    }
+    html += '<button class="nav-btn next" id="ovDone" style="margin-top:14px;">关闭</button>';
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    document.getElementById('ovDone').onclick = closeOverlay;
+    document.getElementById('vbClear')?.addEventListener('click', () => { if (confirm('确定清空生词本？')) { state.vocab = {}; saveState(); render(); renderVocabBook(); } });
+    document.querySelectorAll('#overlay [data-vw]').forEach(el => el.onclick = () => { delete state.vocab[el.dataset.vw]; saveState(); render(); renderVocabBook(); });
+}
 function updateToolbar() {
     const modeBtn = document.getElementById('modeToggle');
     const wrongBtn = document.getElementById('wrongToggle');
@@ -603,6 +663,8 @@ function updateToolbar() {
 // 核心渲染函数（包含所有事件绑定）
 // ================================================================
 function render() {
+    applyFontScale();
+    applyThemeColor();
     if (!hasQBank()) { renderImportScreen(); saveState(); return; }
     if (state.exam) { renderExam(); updateToolbar(); saveState(); return; }
     renderSubjectTabs();
@@ -702,6 +764,8 @@ function renderQuestion() {
     // 题目自身的科目/题型（强化模式跨科目时用 q._subject；普通流程回退到当前科目）
     const qSubject = q._subject || state.currentSubject;
     const qType = q._type || state.currentType;
+    const isMath = (qSubject === '线性代数') || ['计算题', '证明题', '填空题'].includes(qType);
+    const isEng = (qSubject === '大学英语');
     const selected = getAnswer(qSubject, qType, q.id);
     const showExp = isExplanationShown(qSubject, qType, q.id) || state.studyMode;
     if (state.studyMode) {
@@ -733,7 +797,7 @@ function renderQuestion() {
 
     // 阅读理解每道题都显示文章
     if (q.passage) {
-        html += `<div class="passage-box"><div class="p-title">📄 阅读文章</div>${q.passage.replace(/\n/g, '<br>')}</div>`;
+        html += `<div class="passage-box"><div class="p-title">📄 阅读文章（点单词可标记生词）</div>${markupEnglish(q.passage).replace(/\n/g, '<br>')}</div>`;
     }
 
     const favOn = isFav(qSubject, qType, q.id);
@@ -747,8 +811,13 @@ function renderQuestion() {
         </div>
     `;
 
-    let qText = q.question.replace(/\n/g, '<br>');
-    html += `<div class="q-text">${qText}</div>`;
+    if (isMath) {
+        html += `<div class="q-text math">${escapeHtml(q.question)}</div>`;
+    } else if (isEng) {
+        html += `<div class="q-text">${markupEnglish(q.question).replace(/\n/g, '<br>')}</div>`;
+    } else {
+        html += `<div class="q-text">${q.question.replace(/\n/g, '<br>')}</div>`;
+    }
 
     // 翻译按钮（含文章翻译）
     if (state.currentSubject === '大学英语') {
@@ -837,7 +906,7 @@ function renderQuestion() {
             }
         } else {
             if (showExp || state.studyMode) {
-                html += `<div style="font-size:14px;line-height:1.7;color:var(--text-secondary);white-space:pre-wrap;">${q.answer}</div>`;
+                html += `<div class="${isMath ? 'math' : ''}" style="font-size:14px;line-height:1.7;color:var(--text-secondary);white-space:pre-wrap;">${isMath ? escapeHtml(q.answer) : q.answer}</div>`;
             } else {
                 html += `<div style="font-size:14px;color:var(--text-muted);">点击下方"显示答案"查看参考答案</div>`;
             }
@@ -887,6 +956,13 @@ function renderQuestion() {
                 <button id="importData">📥 导入进度</button>
                 <textarea id="dataInput" placeholder="粘贴导出的密文"></textarea>
                 <button id="confirmImport" style="background:#4f46e5;color:#fff;margin-top:4px;">确认导入</button>
+                <button id="menuVocab" style="margin-top:4px;">📒 生词本</button>
+                <div style="font-size:12px;color:var(--text-muted);margin:6px 0 2px;">字号</div>
+                <div class="fontscale-row" id="fontScaleRow">
+                    <button data-fs="small">A−</button>
+                    <button data-fs="normal">A</button>
+                    <button data-fs="large">A+</button>
+                </div>
                 <button id="menuImportQBank" style="margin-top:4px;">📚 导入/更换题库</button>
                 <button id="resetAllData" style="color:#ef4444;margin-top:4px;">🗑️ 重置所有进度</button>
             </div>
@@ -944,6 +1020,13 @@ function renderQuestion() {
         toggleFav(qSubject, qType, q.id);
         render();
     });
+
+    // 英语生词：点单词标记/取消
+    area.querySelectorAll('.word').forEach(el => el.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggleVocab(this.dataset.w);
+        render();
+    }));
 
     // 翻译
     document.getElementById('transBtn')?.addEventListener('click', () => {
@@ -1003,6 +1086,17 @@ function renderQuestion() {
         } catch(e) {
             alert('密文无效，请重新复制');
         }
+    });
+    document.getElementById('menuVocab')?.addEventListener('click', function() {
+        dataMenu.classList.remove('show');
+        renderVocabBook();
+    });
+    document.querySelectorAll('#fontScaleRow button').forEach(b => {
+        if (b.dataset.fs === state.fontScale) b.classList.add('sel');
+        b.addEventListener('click', function() {
+            state.fontScale = this.dataset.fs;
+            render();
+        });
     });
     document.getElementById('menuImportQBank')?.addEventListener('click', function() {
         dataMenu.classList.remove('show');
