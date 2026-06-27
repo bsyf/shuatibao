@@ -1,6 +1,6 @@
 // 刷题宝 Service Worker —— 离线缓存（cache-first）
 // 改了 index.html / 图标 / manifest 后，把 CACHE 版本号 +1，用户下次联网打开即自动更新。
-const CACHE = 'shuatibao-v2';
+const CACHE = 'shuatibao-v3';
 const ASSETS = [
   './',
   './index.html',

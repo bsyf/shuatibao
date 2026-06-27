@@ -126,6 +126,16 @@
         body.dark .btn-trans { background: #1e3a8a; color: #93c5fd; border-color: #3730a3; }
         .btn-dark { background: #e2e8f0; color: #1e293b; border-color: #cbd5e1; }
         body.dark .btn-dark { background: #334155; color: #f1f5f9; border-color: #475569; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 18px 12px; }
+        .overlay-card { background: var(--bg-app); color: var(--text-primary); width: 100%; max-width: 460px; border-radius: 14px; padding: 18px 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
+        .overlay-card h2 { font-size: 17px; margin-bottom: 10px; }
+        .ov-close { float: right; cursor: pointer; font-size: 20px; color: var(--text-muted); line-height: 1; }
+        .stat-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+        .bar { height: 8px; border-radius: 4px; background: var(--border-color); overflow: hidden; flex: 1; }
+        .bar > div { height: 100%; }
+        .exam-opt { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; }
+        .exam-opt button { padding: 6px 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; font-size: 13px; }
+        .exam-opt button.sel { background: #4f46e5; color: #fff; border-color: #4f46e5; }
         .data-menu { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--bg-app); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 99; width: 200px; }
         .data-menu.show { display: block; }
         .data-menu button { display: block; width: 100%; padding: 6px 0; border: none; background: transparent; color: var(--text-secondary); font-size: 13px; cursor: pointer; border-radius: 4px; }
@@ -140,12 +150,19 @@
     <div class="header">
         <div class="header-top">
             <h1>📖 刷题宝 <span>· 完整版</span></h1>
-            <span class="progress-text" id="progressText">0 / 0</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span class="progress-text" id="streakText" style="background:rgba(255,200,0,0.25);">🔥 0 天</span>
+                <span class="progress-text" id="progressText">0 / 0</span>
+            </div>
         </div>
     </div>
     <div class="toolbar" id="toolbar">
         <button class="btn-sm" id="modeToggle">📖 学习模式 (关)</button>
         <button class="btn-sm danger" id="wrongToggle">❌ 错题本</button>
+        <button class="btn-sm" id="reviewToggle">🔁 强化错题</button>
+        <button class="btn-sm" id="favToggle">⭐ 收藏夹</button>
+        <button class="btn-sm" id="examBtn">📝 模考</button>
+        <button class="btn-sm" id="statsBtn">📈 统计</button>
         <button class="btn-sm btn-shuffle" id="shuffleBtn">🎲 随机</button>
         <button class="btn-sm btn-dark" id="darkToggle">🌙 夜间</button>
         <span id="modeBadge" class="study-mode-badge" style="display:none;">📖 学习中</span>
@@ -235,8 +252,16 @@ const state = {
     wrongOnly: false,
     shuffled: false,
     shuffledIndices: {},
-    darkMode: false
+    darkMode: false,
+    // —— 新功能状态 ——
+    favorites: {},        // 收藏：key -> true
+    favOnly: false,       // 只看收藏
+    reviewPool: {},       // 强化错题队列：key -> 连续答对次数（满 REVIEW_GRAD 毕业）
+    reviewMode: false,    // 强化错题模式
+    studyDays: [],        // 打卡：['2026-06-27', ...]
+    exam: null            // 模考会话（见 startExam）
 };
+const REVIEW_GRAD = 2;    // 强化模式连续答对几次算掌握
 
 // ================================================================
 // 进度持久化（localStorage 自动保存/恢复）
@@ -245,7 +270,8 @@ const STORAGE_KEY = 'shuatibao_v1';
 // 需要记忆的字段（其余如 subjects 由题库派生，不持久化）
 const PERSIST_FIELDS = ['answers', 'showExplanation', 'showTranslation',
     'currentSubject', 'currentType', 'currentIndex',
-    'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode'];
+    'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode',
+    'favorites', 'favOnly', 'reviewPool', 'studyDays', 'exam'];
 
 function serializeState() {
     const o = {};
@@ -275,6 +301,14 @@ function applyStateValidation() {
     const types = getTypes(state.currentSubject);
     if (!state.currentType || !types.includes(state.currentType)) {
         state.currentType = types.length > 0 ? types[0] : null;
+    }
+    // 题库变动后：若强化/收藏过滤已无内容，自动关掉，避免空白
+    if (state.reviewMode && reviewCount() === 0) state.reviewMode = false;
+    if (state.favOnly && favCount() === 0) state.favOnly = false;
+    // 模考会话若引用了已不存在的题，丢弃
+    if (state.exam && state.exam.items) {
+        const ok = state.exam.items.every(it => DATA[it.s] && DATA[it.s].types[it.t] && DATA[it.s].types[it.t].some(x => x.id === it.id));
+        if (!ok) state.exam = null;
     }
     const qs = getFilteredQuestions(state.currentSubject, state.currentType);
     if (!Number.isInteger(state.currentIndex) || state.currentIndex < 0 || state.currentIndex >= qs.length) {
@@ -353,9 +387,15 @@ function isWrong(subject, type, id) {
     return ans !== q.answer;
 }
 function getFilteredQuestions(subject, type) {
+    if (state.reviewMode) {
+        return getReviewQuestions();   // 强化模式：跨全部科目，忽略 subject/type
+    }
     let qs = getTypeQuestions(subject, type);
     if (state.wrongOnly) {
         qs = qs.filter(q => isWrong(subject, type, q.id));
+    }
+    if (state.favOnly) {
+        qs = qs.filter(q => isFav(subject, type, q.id));
     }
     const key = subject + '-' + type;
     if (state.shuffled && state.shuffledIndices[key]) {
@@ -416,6 +456,100 @@ function toggleExplanation(subject, type, id) {
     const key = subject + '-' + type + '-' + id;
     state.showExplanation[key] = !state.showExplanation[key];
 }
+function qkey(subject, type, id) { return subject + '-' + type + '-' + id; }
+
+// —— 答题记录（集中处理：存答案 + 更新强化队列 + 打卡）——
+function recordAnswer(subject, type, id, val, correctAnswer) {
+    const key = qkey(subject, type, id);
+    state.answers[key] = val;
+    const correct = (val === correctAnswer);
+    if (!correct) {
+        state.reviewPool[key] = 0;                 // 答错：进/重置强化队列
+    } else if (key in state.reviewPool) {
+        state.reviewPool[key] = (state.reviewPool[key] || 0) + 1;
+        if (state.reviewPool[key] >= REVIEW_GRAD) delete state.reviewPool[key]; // 掌握，毕业
+    }
+    recordStudyToday();
+}
+
+// —— 收藏 ——
+function isFav(subject, type, id) { return !!state.favorites[qkey(subject, type, id)]; }
+function toggleFav(subject, type, id) {
+    const key = qkey(subject, type, id);
+    if (state.favorites[key]) delete state.favorites[key];
+    else state.favorites[key] = true;
+}
+function favCount() { return Object.keys(state.favorites).length; }
+
+// —— 强化错题队列 ——
+function reviewCount() { return Object.keys(state.reviewPool).length; }
+// 返回强化队列里的题目（跨全部科目/题型），附带所在科目与题型
+function getReviewQuestions() {
+    const out = [];
+    for (const s of state.subjects) {
+        const types = DATA[s].types;
+        for (const t in types) {
+            for (const item of types[t]) {
+                if (qkey(s, t, item.id) in state.reviewPool) {
+                    out.push(expandQuestion(Object.assign({}, item, { _subject: s }), t));
+                }
+            }
+        }
+    }
+    return out;
+}
+
+// —— 每日打卡 ——
+function todayStr() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+}
+function recordStudyToday() {
+    const t = todayStr();
+    if (!state.studyDays.includes(t)) state.studyDays.push(t);
+}
+function studyStreak() {
+    if (!state.studyDays.length) return 0;
+    const set = {}; state.studyDays.forEach(d => set[d] = true);
+    let streak = 0;
+    const cur = new Date();
+    // 今天没打卡就从昨天起算，保证“连续”不因今天还没做而断
+    if (!set[todayStr()]) cur.setDate(cur.getDate() - 1);
+    for (let i = 0; i < 3650; i++) {
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const day = String(cur.getDate()).padStart(2, '0');
+        const ds = cur.getFullYear() + '-' + m + '-' + day;
+        if (set[ds]) { streak++; cur.setDate(cur.getDate() - 1); }
+        else break;
+    }
+    return streak;
+}
+
+// —— 统计与薄弱点 ——
+function computeStats() {
+    const bySubject = {}, byType = {};
+    let totalAns = 0, totalCorrect = 0;
+    const wrongList = [];
+    for (const s of state.subjects) {
+        const types = DATA[s].types;
+        for (const t in types) {
+            for (const item of types[t]) {
+                const ans = state.answers[qkey(s, t, item.id)];
+                if (ans === undefined || ans === '') continue;
+                const correct = (ans === item.answer);
+                totalAns++; if (correct) totalCorrect++;
+                (bySubject[s] = bySubject[s] || { a: 0, c: 0 });
+                bySubject[s].a++; if (correct) bySubject[s].c++;
+                (byType[t] = byType[t] || { a: 0, c: 0 });
+                byType[t].a++; if (correct) byType[t].c++;
+                if (!correct) wrongList.push({ s, t, q: item.question });
+            }
+        }
+    }
+    return { bySubject, byType, totalAns, totalCorrect, wrongList };
+}
 function updateProgress() {
     const total = getTotalQuestions(state.currentSubject);
     const answered = getAnsweredCount(state.currentSubject);
@@ -442,6 +576,20 @@ function updateToolbar() {
         wrongBtn.classList.remove('active');
         wrongBtn.textContent = '❌ 错题本';
     }
+    const reviewBtn = document.getElementById('reviewToggle');
+    if (reviewBtn) {
+        const n = reviewCount();
+        reviewBtn.textContent = '🔁 强化错题' + (n ? ' (' + n + ')' : '');
+        reviewBtn.classList.toggle('active', state.reviewMode);
+    }
+    const favBtn = document.getElementById('favToggle');
+    if (favBtn) {
+        const n = favCount();
+        favBtn.textContent = '⭐ 收藏夹' + (n ? ' (' + n + ')' : '');
+        favBtn.classList.toggle('active', state.favOnly);
+    }
+    const streakEl = document.getElementById('streakText');
+    if (streakEl) streakEl.textContent = '🔥 ' + studyStreak() + ' 天';
     if (state.darkMode) {
         document.body.classList.add('dark');
         darkBtn.textContent = '☀️ 白天';
@@ -456,6 +604,7 @@ function updateToolbar() {
 // ================================================================
 function render() {
     if (!hasQBank()) { renderImportScreen(); saveState(); return; }
+    if (state.exam) { renderExam(); updateToolbar(); saveState(); return; }
     renderSubjectTabs();
     renderTypeFilters();
     renderQuestion();
@@ -537,7 +686,10 @@ function renderQuestion() {
     const area = document.getElementById('questionArea');
     const questions = getFilteredQuestions(state.currentSubject, state.currentType);
     if (!questions || questions.length === 0) {
-        let msg = state.wrongOnly ? '🎉 错题本为空，继续加油！' : '该题型暂无题目';
+        let msg = '该题型暂无题目';
+        if (state.reviewMode) msg = '🎉 强化队列已清空，错题都掌握啦！';
+        else if (state.favOnly) msg = '⭐ 这里还没有收藏的题目';
+        else if (state.wrongOnly) msg = '🎉 错题本为空，继续加油！';
         area.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>${msg}</p></div>`;
         return;
     }
@@ -547,19 +699,21 @@ function renderQuestion() {
     const q = questions[state.currentIndex];
     const total = questions.length;
     const idx = state.currentIndex + 1;
-    const selected = getAnswer(state.currentSubject, state.currentType, q.id);
-    const showExp = isExplanationShown(state.currentSubject, state.currentType, q.id) || state.studyMode;
+    // 题目自身的科目/题型（强化模式跨科目时用 q._subject；普通流程回退到当前科目）
+    const qSubject = q._subject || state.currentSubject;
+    const qType = q._type || state.currentType;
+    const selected = getAnswer(qSubject, qType, q.id);
+    const showExp = isExplanationShown(qSubject, qType, q.id) || state.studyMode;
     if (state.studyMode) {
-        const key = state.currentSubject + '-' + state.currentType + '-' + q.id;
-        state.showExplanation[key] = true;
+        state.showExplanation[qkey(qSubject, qType, q.id)] = true;
     }
-    const showTrans = isTranslationShown(state.currentSubject, state.currentType, q.id);
+    const showTrans = isTranslationShown(qSubject, qType, q.id);
 
     // ---- 答题卡 ----
     let gridHtml = `<div class="grid-container"><div class="grid-title"><span>📊 答题卡</span><span>灰=未做 蓝=已答 绿=正确 红=错误</span></div><div class="grid">`;
     questions.forEach((item, i) => {
         const isCurrent = (i === state.currentIndex);
-        const ans = getAnswer(state.currentSubject, state.currentType, item.id);
+        const ans = getAnswer(item._subject || state.currentSubject, item._type || state.currentType, item.id);
         let cls = 'grid-item';
         if (isCurrent) cls += ' current';
         if (ans) {
@@ -582,11 +736,14 @@ function renderQuestion() {
         html += `<div class="passage-box"><div class="p-title">📄 阅读文章</div>${q.passage.replace(/\n/g, '<br>')}</div>`;
     }
 
+    const favOn = isFav(qSubject, qType, q.id);
     html += `
         <div class="q-header">
             <span class="q-number">${idx} / ${total}</span>
-            <span class="q-type-badge">${q._type}</span>
+            <span class="q-type-badge">${state.reviewMode ? qSubject + ' · ' : ''}${q._type}</span>
+            ${state.reviewMode ? `<span class="study-mode-badge" style="background:#fee2e2;color:#b91c1c;">🔁 强化 已对 ${state.reviewPool[qkey(qSubject,qType,q.id)] || 0}/${REVIEW_GRAD}</span>` : ''}
             ${state.studyMode ? '<span class="study-mode-badge">📖 学习模式</span>' : ''}
+            <button class="btn-sm" id="favBtn" style="${favOn ? 'background:#fef3c7;color:#92400e;border-color:#fcd34d;' : ''}">${favOn ? '⭐ 已收藏' : '☆ 收藏'}</button>
         </div>
     `;
 
@@ -757,48 +914,40 @@ function renderQuestion() {
                 if (this.classList.contains('disabled')) return;
                 const opt = this.dataset.opt;
                 const isMulti = (type.includes('多选') || type === '多选题');
-                const isJudge = (type === '判断题');
-                if (isJudge) {
-                    setAnswer(state.currentSubject, state.currentType, q.id, opt);
-                    const expKey = state.currentSubject + '-' + state.currentType + '-' + q.id;
-                    state.showExplanation[expKey] = true;
-                    render();
-                } else if (isMulti) {
-                    const current = state.answers[state.currentSubject + '-' + state.currentType + '-' + q.id] || '';
+                let val = opt;
+                if (isMulti) {
+                    const current = state.answers[qkey(qSubject, qType, q.id)] || '';
                     let parts = current ? current.split('') : [];
-                    if (parts.includes(opt)) {
-                        parts = parts.filter(p => p !== opt);
-                    } else {
-                        parts.push(opt);
-                    }
+                    if (parts.includes(opt)) parts = parts.filter(p => p !== opt);
+                    else parts.push(opt);
                     parts.sort();
-                    setAnswer(state.currentSubject, state.currentType, q.id, parts.join(''));
-                    const expKey = state.currentSubject + '-' + state.currentType + '-' + q.id;
-                    state.showExplanation[expKey] = true;
-                    render();
-                } else {
-                    setAnswer(state.currentSubject, state.currentType, q.id, opt);
-                    const expKey = state.currentSubject + '-' + state.currentType + '-' + q.id;
-                    state.showExplanation[expKey] = true;
-                    render();
+                    val = parts.join('');
                 }
+                recordAnswer(qSubject, qType, q.id, val, q.answer);
+                state.showExplanation[qkey(qSubject, qType, q.id)] = true;
+                render();
             });
         });
 
         document.getElementById('toggleAnswerBtn')?.addEventListener('click', () => {
-            toggleExplanation(state.currentSubject, state.currentType, q.id);
+            toggleExplanation(qSubject, qType, q.id);
             render();
         });
         document.getElementById('resetAnswerBtn')?.addEventListener('click', () => {
-            const key = state.currentSubject + '-' + state.currentType + '-' + q.id;
-            delete state.answers[key];
+            delete state.answers[qkey(qSubject, qType, q.id)];
             render();
         });
     }
 
+    // 收藏星标
+    document.getElementById('favBtn')?.addEventListener('click', () => {
+        toggleFav(qSubject, qType, q.id);
+        render();
+    });
+
     // 翻译
     document.getElementById('transBtn')?.addEventListener('click', () => {
-        toggleTranslation(state.currentSubject, state.currentType, q.id);
+        toggleTranslation(qSubject, qType, q.id);
     });
 
     // 导航
@@ -880,6 +1029,183 @@ function renderQuestion() {
 }
 
 // ================================================================
+// 统计面板（overlay）
+// ================================================================
+function closeOverlay() { const o = document.getElementById('overlay'); if (o) o.remove(); }
+function showOverlay(innerHtml) {
+    closeOverlay();
+    const o = document.createElement('div');
+    o.id = 'overlay'; o.className = 'overlay';
+    o.innerHTML = '<div class="overlay-card">' + innerHtml + '</div>';
+    o.addEventListener('click', e => { if (e.target === o) closeOverlay(); });
+    document.body.appendChild(o);
+    return o;
+}
+function renderStats() {
+    const st = computeStats();
+    const rate = st.totalAns ? Math.round(st.totalCorrect / st.totalAns * 100) : 0;
+    const barRow = (label, o) => {
+        const p = Math.round(o.c / o.a * 100);
+        return `<div class="stat-row"><span style="flex:0 0 96px;">${label}</span><span class="bar"><div style="width:${p}%;background:${p >= 60 ? '#22c55e' : '#ef4444'}"></div></span><span style="flex:0 0 78px;text-align:right;">${p}% (${o.c}/${o.a})</span></div>`;
+    };
+    let html = '<span class="ov-close" id="ovClose">✕</span><h2>📈 统计与薄弱点</h2>';
+    html += `<div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">已答 <b>${st.totalAns}</b> 题 · 总正确率 <b>${rate}%</b> · 🔥 连续 ${studyStreak()} 天</div>`;
+    const subs = Object.keys(st.bySubject);
+    html += '<div style="font-weight:600;font-size:13px;margin:10px 0 2px;">各科正确率</div>';
+    html += subs.length ? subs.map(s => barRow(s, st.bySubject[s])).join('') : '<div style="font-size:12px;color:var(--text-muted);">还没有答题记录</div>';
+    const types = Object.keys(st.byType);
+    if (types.length) {
+        html += '<div style="font-weight:600;font-size:13px;margin:14px 0 2px;">各题型正确率（薄弱项靠红色）</div>';
+        html += types.sort((a, b) => (st.byType[a].c / st.byType[a].a) - (st.byType[b].c / st.byType[b].a)).map(t => barRow(t, st.byType[t])).join('');
+    }
+    if (st.wrongList.length) {
+        html += '<div style="font-weight:600;font-size:13px;margin:14px 0 2px;">错题列表（' + st.wrongList.length + '）</div>';
+        html += st.wrongList.slice(0, 10).map(w => `<div style="font-size:12px;color:var(--text-secondary);padding:4px 0;border-bottom:1px dashed var(--border-color);">[${w.s}] ${w.q.slice(0, 38)}${w.q.length > 38 ? '…' : ''}</div>`).join('');
+    }
+    html += '<button class="nav-btn next" id="ovDone" style="margin-top:16px;">关闭</button>';
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    document.getElementById('ovDone').onclick = closeOverlay;
+}
+
+// ================================================================
+// 模考模式
+// ================================================================
+function isObjectiveItem(type, item) { return type === '判断题' || (item.options && item.options.length > 0); }
+let examCfg = { subject: '__ALL__', count: 20, minutes: 0 };
+function examCandidates(scope) {
+    const out = [];
+    const subs = scope === '__ALL__' ? state.subjects : [scope];
+    for (const s of subs) { const types = DATA[s].types; for (const t in types) { for (const item of types[t]) { if (isObjectiveItem(t, item)) out.push({ s, t, id: item.id }); } } }
+    return out;
+}
+function openExamConfig() {
+    const total = examCandidates(examCfg.subject).length;
+    const subBtns = ['__ALL__'].concat(state.subjects).map(s => `<button data-sub="${s}" class="${examCfg.subject === s ? 'sel' : ''}">${s === '__ALL__' ? '全部科目' : s}</button>`).join('');
+    const cntBtns = [10, 20, 30, 50].map(c => `<button data-cnt="${c}" class="${examCfg.count === c ? 'sel' : ''}">${c}题</button>`).join('') + `<button data-cnt="0" class="${examCfg.count === 0 ? 'sel' : ''}">全部</button>`;
+    const minBtns = [0, 10, 20, 30].map(m => `<button data-min="${m}" class="${examCfg.minutes === m ? 'sel' : ''}">${m === 0 ? '不计时' : m + '分钟'}</button>`).join('');
+    let html = '<span class="ov-close" id="ovClose">✕</span><h2>📝 模考设置</h2>';
+    html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">只抽客观题（单选/多选/判断/选词填空），可自动评分。</div>';
+    html += '<div style="font-weight:600;font-size:13px;">科目</div><div class="exam-opt" id="exSub">' + subBtns + '</div>';
+    html += '<div style="font-weight:600;font-size:13px;">题数</div><div class="exam-opt" id="exCnt">' + cntBtns + '</div>';
+    html += '<div style="font-weight:600;font-size:13px;">计时</div><div class="exam-opt" id="exMin">' + minBtns + '</div>';
+    html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">可用客观题：<b>${total}</b> 题</div>`;
+    html += '<button class="nav-btn next" id="exStart">开始模考</button>';
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    document.querySelectorAll('#exSub button').forEach(b => b.onclick = () => { examCfg.subject = b.dataset.sub; openExamConfig(); });
+    document.querySelectorAll('#exCnt button').forEach(b => b.onclick = () => { examCfg.count = +b.dataset.cnt; openExamConfig(); });
+    document.querySelectorAll('#exMin button').forEach(b => b.onclick = () => { examCfg.minutes = +b.dataset.min; openExamConfig(); });
+    document.getElementById('exStart').onclick = startExam;
+}
+function startExam() {
+    let cand = examCandidates(examCfg.subject);
+    if (!cand.length) { alert('该范围没有可用的客观题'); return; }
+    shuffleArray(cand);
+    const n = examCfg.count === 0 ? cand.length : Math.min(examCfg.count, cand.length);
+    state.exam = { items: cand.slice(0, n), answers: {}, index: 0, minutes: examCfg.minutes, startAt: Date.now(), submitted: false };
+    closeOverlay();
+    render();
+}
+function findQuestion(s, t, id) {
+    const item = (DATA[s] && DATA[s].types[t] || []).find(x => x.id === id);
+    if (!item) return null;
+    return expandQuestion(Object.assign({}, item, { _subject: s }), t);
+}
+let examTimerId = null;
+function clearExamTimer() { if (examTimerId) { clearInterval(examTimerId); examTimerId = null; } }
+function examRemaining() { if (!state.exam || !state.exam.minutes) return null; return state.exam.minutes * 60 - Math.floor((Date.now() - state.exam.startAt) / 1000); }
+function fmtTime(sec) { sec = Math.max(0, sec); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+function gradeExam() {
+    const ex = state.exam; let correct = 0;
+    ex.items.forEach((it, i) => { const q = findQuestion(it.s, it.t, it.id); if (q && ex.answers[i] !== undefined && ex.answers[i] === q.answer) correct++; });
+    return correct;
+}
+function submitExam() { clearExamTimer(); state.exam.submitted = true; render(); }
+function exitExam() { clearExamTimer(); state.exam = null; render(); }
+function renderExamOptions(q, selected) {
+    const type = q._type; let html = '';
+    if (type === '判断题') {
+        html += '<div class="options">';
+        ['正确', '错误'].forEach((opt, i) => { const sel = selected === opt; html += `<div class="option-item ${sel ? 'selected' : ''}" data-exopt="${opt}"><span class="label">${'AB'[i]}.</span><span class="text">${opt}</span>${sel ? '<span class="check-mark">✅</span>' : ''}</div>`; });
+        html += '</div>';
+    } else if (q.options && q.options.length) {
+        const isMulti = type.includes('多选');
+        html += `<div class="${type === '选词填空' ? 'options-grid' : 'options'}">`;
+        const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        q.options.forEach((opt, i) => { const lab = L[i]; const sel = selected && (isMulti ? selected.includes(lab) : selected === lab); const txt = opt.replace(/^[A-Z]\)\s*/, ''); html += `<div class="option-item ${sel ? 'selected' : ''}" data-exopt="${lab}"><span class="label">${lab}.</span><span class="text">${txt}</span>${sel ? '<span class="check-mark">✅</span>' : ''}</div>`; });
+        html += '</div>';
+        if (isMulti) html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">💡 多选题</div>';
+    }
+    return html;
+}
+function bindExamOptions(area) {
+    const ex = state.exam; const cur = ex.items[ex.index]; const q = findQuestion(cur.s, cur.t, cur.id); const type = q._type; const i = ex.index;
+    area.querySelectorAll('.option-item').forEach(el => el.addEventListener('click', function () {
+        const opt = this.dataset.exopt;
+        if (type.includes('多选')) {
+            let parts = (ex.answers[i] || '') ? ex.answers[i].split('') : [];
+            if (parts.includes(opt)) parts = parts.filter(p => p !== opt); else parts.push(opt);
+            parts.sort(); ex.answers[i] = parts.join('');
+        } else { ex.answers[i] = opt; }
+        render();
+    }));
+}
+function renderExam() {
+    clearExamTimer();
+    document.getElementById('subjectTabs').innerHTML = '';
+    document.getElementById('typeFilters').innerHTML = '';
+    const area = document.getElementById('questionArea');
+    const ex = state.exam;
+    if (ex.submitted) { renderExamResult(area); return; }
+    const rem = examRemaining();
+    if (rem !== null && rem <= 0) { submitExam(); return; }
+    const cur = ex.items[ex.index];
+    const q = findQuestion(cur.s, cur.t, cur.id);
+    const total = ex.items.length;
+    document.getElementById('progressText').textContent = '模考 ' + (ex.index + 1) + '/' + total;
+    let html = '<div class="grid-container"><div class="grid-title"><span>📝 模考答题卡</span>' + (rem !== null ? `<span id="examTimer" style="color:#ef4444;font-weight:700;">⏱ ${fmtTime(rem)}</span>` : '<span>不计时</span>') + '</div><div class="grid">';
+    ex.items.forEach((it, i) => { let cls = 'grid-item'; if (i === ex.index) cls += ' current'; if (ex.answers[i] !== undefined && ex.answers[i] !== '') cls += ' answered'; html += `<div class="${cls}" data-exidx="${i}">${i + 1}</div>`; });
+    html += '</div></div>';
+    html += `<div class="q-header"><span class="q-number">${ex.index + 1} / ${total}</span><span class="q-type-badge">${q._subject} · ${q._type}</span></div>`;
+    html += `<div class="q-text">${q.question.replace(/\n/g, '<br>')}</div>`;
+    html += renderExamOptions(q, ex.answers[ex.index]);
+    html += `<div class="nav-area"><button class="nav-btn prev" id="exPrev" ${ex.index === 0 ? 'disabled' : ''}>⬅ 上一题</button>`;
+    html += ex.index < total - 1 ? '<button class="nav-btn next" id="exNext">下一题 ➔</button>' : '<button class="nav-btn next" id="exSubmit" style="background:#ef4444;">✅ 交卷</button>';
+    html += '</div>';
+    html += '<div class="flex-row" style="margin-top:10px;gap:6px;"><button class="toggle-answer-btn" id="exSubmitAny">提前交卷</button><button class="toggle-answer-btn" id="exQuit" style="background:#fee2e2;color:#b91c1c;">退出模考</button></div>';
+    area.innerHTML = html;
+    area.querySelectorAll('.grid-item').forEach(el => el.onclick = function () { ex.index = +this.dataset.exidx; render(); });
+    bindExamOptions(area);
+    document.getElementById('exPrev')?.addEventListener('click', () => { if (ex.index > 0) { ex.index--; render(); } });
+    document.getElementById('exNext')?.addEventListener('click', () => { if (ex.index < total - 1) { ex.index++; render(); } });
+    document.getElementById('exSubmit')?.addEventListener('click', () => { if (confirm('确定交卷吗？')) submitExam(); });
+    document.getElementById('exSubmitAny')?.addEventListener('click', () => { if (confirm('确定提前交卷吗？')) submitExam(); });
+    document.getElementById('exQuit')?.addEventListener('click', () => { if (confirm('退出将放弃本次模考，确定？')) exitExam(); });
+    if (rem !== null) { examTimerId = setInterval(() => { const r = examRemaining(); if (r <= 0) { submitExam(); return; } const el = document.getElementById('examTimer'); if (el) el.textContent = '⏱ ' + fmtTime(r); }, 1000); }
+}
+function renderExamResult(area) {
+    const ex = state.exam; const total = ex.items.length; const correct = gradeExam();
+    const pct = total ? Math.round(correct / total * 100) : 0;
+    const grade = pct >= 90 ? '优秀 🏆' : pct >= 80 ? '良好 👍' : pct >= 60 ? '及格 ✅' : '继续加油 💪';
+    document.getElementById('progressText').textContent = '模考结果';
+    let html = `<div class="grid-container" style="text-align:center;padding:18px;"><div style="font-size:32px;font-weight:800;color:${pct >= 60 ? '#22c55e' : '#ef4444'};">${pct}分</div><div style="margin:6px 0;font-size:14px;">答对 ${correct} / ${total} 题 · ${grade}</div></div>`;
+    html += '<div style="font-weight:600;margin:8px 0;">逐题回顾</div>';
+    ex.items.forEach((it, i) => {
+        const q = findQuestion(it.s, it.t, it.id); const ans = ex.answers[i]; const ok = ans !== undefined && ans !== '' && ans === q.answer;
+        html += `<div style="padding:8px 10px;border-radius:8px;margin-bottom:6px;background:var(--bg-card);border-left:4px solid ${ok ? '#22c55e' : '#ef4444'};">`;
+        html += `<div style="font-size:13px;">${i + 1}. <span style="color:var(--text-muted);">[${q._subject}/${q._type}]</span> ${q.question.replace(/\n/g, '<br>')}</div>`;
+        html += `<div style="font-size:12px;margin-top:4px;">你的答案：<b style="color:${ok ? '#22c55e' : '#ef4444'};">${ans === undefined || ans === '' ? '(未答)' : ans}</b> ｜ 正确：<b style="color:#22c55e;">${q.answer}</b></div>`;
+        if (q.explanation) html += `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">📖 ${q.explanation}</div>`;
+        html += '</div>';
+    });
+    html += '<div class="nav-area"><button class="nav-btn prev" id="exAgain">🔄 再来一次</button><button class="nav-btn next" id="exDone">完成</button></div>';
+    area.innerHTML = html;
+    document.getElementById('exAgain').onclick = () => { state.exam = null; render(); openExamConfig(); };
+    document.getElementById('exDone').onclick = exitExam;
+}
+
+// ================================================================
 // 初始化
 // ================================================================
 function init() {
@@ -903,9 +1229,30 @@ function init() {
     });
     document.getElementById('wrongToggle').addEventListener('click', function() {
         state.wrongOnly = !state.wrongOnly;
+        if (state.wrongOnly) { state.favOnly = false; state.reviewMode = false; }
         state.currentIndex = 0;
         render();
     });
+    document.getElementById('reviewToggle').addEventListener('click', function() {
+        state.reviewMode = !state.reviewMode;
+        if (state.reviewMode) {
+            if (reviewCount() === 0) { state.reviewMode = false; alert('强化队列是空的～先去刷题，答错的题会自动进来。'); return; }
+            state.wrongOnly = false; state.favOnly = false; state.studyMode = false;
+        }
+        state.currentIndex = 0;
+        render();
+    });
+    document.getElementById('favToggle').addEventListener('click', function() {
+        state.favOnly = !state.favOnly;
+        if (state.favOnly) {
+            if (favCount() === 0) { state.favOnly = false; alert('还没有收藏的题～点题目右上角「☆ 收藏」加进来。'); return; }
+            state.wrongOnly = false; state.reviewMode = false;
+        }
+        state.currentIndex = 0;
+        render();
+    });
+    document.getElementById('examBtn').addEventListener('click', openExamConfig);
+    document.getElementById('statsBtn').addEventListener('click', renderStats);
     document.getElementById('shuffleBtn').addEventListener('click', function() {
         reshuffleCurrent();
     });
