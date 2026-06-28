@@ -54,6 +54,29 @@
         .type-btn { flex: 0 0 auto; padding: 6px 13px; border-radius: 12px; font-size: 12px; font-weight: 500; background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border-color); cursor: pointer; transition: all 0.2s; touch-action: manipulation; }
         .type-btn.active { background: #eef2ff; color: #4f46e5; border-color: #4f46e5; }
         body.dark .type-btn.active { background: #3730a3; color: #a5b4fc; border-color: #4f46e5; }
+        /* 顶部旧横向工具栏隐藏：功能已移到底部导航栏与「更多」面板（按钮仍在 DOM 中，事件复用） */
+        .toolbar { display: none !important; }
+        /* 底部导航栏（固定，居中对齐 #app 宽度） */
+        .bottomnav { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 480px; z-index: 60; display: flex; background: var(--bg-card); border-top: 1px solid var(--border-color); box-shadow: 0 -2px 12px rgba(0,0,0,0.07); padding-bottom: env(safe-area-inset-bottom); }
+        .bottomnav button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: none; color: var(--text-muted); font-size: 11px; font-weight: 500; padding: 7px 2px 6px; cursor: pointer; touch-action: manipulation; transition: color 0.15s; }
+        .bottomnav button .ico { font-size: 19px; line-height: 1; }
+        .bottomnav button.active { color: #4f46e5; }
+        .bottomnav button:active { transform: scale(0.9); }
+        /* 题库管理列表 */
+        .bank-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; background: var(--bg-card); }
+        .bank-row.active { border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5 inset; }
+        .bank-main { flex: 1; cursor: pointer; min-width: 0; }
+        .bank-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .bank-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .bank-op { flex: 0 0 auto; background: none; border: none; font-size: 16px; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+        .bank-op:active { background: var(--tag-bg); }
+        /* 「更多」面板宫格 */
+        .more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .more-item { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 12px 6px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-card); color: var(--text-primary); cursor: pointer; touch-action: manipulation; }
+        .more-item:active { transform: scale(0.95); }
+        .more-ico { font-size: 22px; line-height: 1; }
+        .more-label { display: block; font-size: 13px; font-weight: 600; }
+        .more-sub { display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px; }
         .question-area { padding: 12px 16px 20px; }
         .grid-container { margin-bottom: 12px; background: var(--bg-card); padding: 8px; border-radius: 10px; border: 1px solid var(--border-color); transition: background 0.3s; }
         .grid-title { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
@@ -193,6 +216,13 @@
     <div class="type-filters" id="typeFilters"></div>
   </div>
     <div class="question-area" id="questionArea"></div>
+    <nav class="bottomnav" id="bottomNav">
+        <button id="bnHome"><span class="ico">🏠</span>刷题</button>
+        <button id="bnWrong"><span class="ico">❌</span>错题</button>
+        <button id="bnFav"><span class="ico">⭐</span>收藏</button>
+        <button id="bnReview"><span class="ico">📅</span>复习</button>
+        <button id="bnMore"><span class="ico">☰</span>更多</button>
+    </nav>
 </div>
 <script>
 // ================================================================
@@ -204,33 +234,111 @@
 // ================================================================
 let PASSAGES = {};
 let DATA = {};
-const QBANK_KEY = 'shuatibao_qbank_v1';
+const QBANK_KEY = 'shuatibao_qbank_v1';     // 旧版：单题库（仅用于迁移）
+const QBANKS_KEY = 'shuatibao_qbanks_v1';   // 新版：多题库 { banks:[{id,name,DATA,PASSAGES}], activeId }
 
-// 从本地存储恢复已导入的题库；成功返回 true
+// 多题库仓库（运行时载入；全部存本机，不上传）
+let QBANKS = { banks: [], activeId: null };
+
+function genBankId() { return 'qb' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+// 从题库内容里猜一个名字：科目数 / 题数
+function bankSummaryName(o) {
+    const subs = Object.keys(o.DATA || {});
+    if (subs.length === 1) return subs[0];
+    if (subs.length > 1) return subs[0] + ' 等' + subs.length + '科';
+    return '题库';
+}
+function persistQBanks() {
+    try { localStorage.setItem(QBANKS_KEY, JSON.stringify(QBANKS)); return true; }
+    catch (e) { alert('保存失败：设备存储空间可能不足'); return false; }
+}
+function activeBank() { return QBANKS.banks.find(b => b.id === QBANKS.activeId) || null; }
+
+// 把当前激活题库的内容装入运行时 DATA / PASSAGES
+function loadActiveIntoRuntime() {
+    const b = activeBank();
+    if (b) { DATA = b.DATA || {}; PASSAGES = b.PASSAGES || {}; }
+    else { DATA = {}; PASSAGES = {}; }
+}
+
+// 从本地存储恢复题库；成功返回 true
 function loadQBank() {
+    // 1) 新版多题库
     let raw;
-    try { raw = localStorage.getItem(QBANK_KEY); } catch (e) { return false; }
-    if (!raw) return false;
-    try {
-        const o = JSON.parse(raw);
-        if (!o || typeof o.DATA !== 'object') return false;
-        DATA = o.DATA; PASSAGES = o.PASSAGES || {};
-        return true;
-    } catch (e) { return false; }
+    try { raw = localStorage.getItem(QBANKS_KEY); } catch (e) { raw = null; }
+    if (raw) {
+        try {
+            const o = JSON.parse(raw);
+            if (o && Array.isArray(o.banks)) {
+                QBANKS = o;
+                if (!activeBank() && QBANKS.banks.length) QBANKS.activeId = QBANKS.banks[0].id;
+                loadActiveIntoRuntime();
+                return hasQBank();
+            }
+        } catch (e) { /* 继续尝试旧版 */ }
+    }
+    // 2) 迁移旧版单题库
+    let old;
+    try { old = localStorage.getItem(QBANK_KEY); } catch (e) { old = null; }
+    if (old) {
+        try {
+            const o = JSON.parse(old);
+            if (o && typeof o.DATA === 'object' && Object.keys(o.DATA).length) {
+                const bank = { id: genBankId(), name: bankSummaryName(o), DATA: o.DATA, PASSAGES: o.PASSAGES || {} };
+                QBANKS = { banks: [bank], activeId: bank.id };
+                persistQBanks();
+                loadActiveIntoRuntime();
+                return true;
+            }
+        } catch (e) { /* ignore */ }
+    }
+    return false;
 }
 function hasQBank() { return DATA && Object.keys(DATA).length > 0; }
 
-// 导入题库文本（JSON）；成功返回 null，失败返回错误说明
-function importQBank(text) {
+// 导入题库文本（JSON）：新增一个题库（不覆盖已有），并设为当前。成功返回 null，失败返回错误说明
+function importQBank(text, name) {
     let o;
     try { o = JSON.parse(text); } catch (e) { return '文件格式不对：不是有效的题库文件（应为 .json）'; }
     if (!o || typeof o.DATA !== 'object' || Object.keys(o.DATA).length === 0) {
         return '题库文件里没有找到题目数据';
     }
-    try { localStorage.setItem(QBANK_KEY, JSON.stringify(o)); }
-    catch (e) { return '保存失败：设备存储空间可能不足'; }
-    DATA = o.DATA; PASSAGES = o.PASSAGES || {};
+    const bank = { id: genBankId(), name: (name || bankSummaryName(o)).trim() || '题库', DATA: o.DATA, PASSAGES: o.PASSAGES || {} };
+    QBANKS.banks.push(bank);
+    QBANKS.activeId = bank.id;
+    if (!persistQBanks()) { QBANKS.banks.pop(); return '保存失败：设备存储空间可能不足'; }
+    loadActiveIntoRuntime();
     return null;
+}
+// 切换当前题库
+function switchBank(id) {
+    if (!QBANKS.banks.some(b => b.id === id)) return;
+    QBANKS.activeId = id;
+    persistQBanks();
+    loadActiveIntoRuntime();
+    state.subjects = Object.keys(DATA);
+    state.currentSubject = state.subjects[0];
+    state.currentType = getTypes(state.currentSubject)[0] || null;
+    state.currentIndex = 0;
+    closeOverlay();
+    render();
+}
+// 重命名 / 删除题库
+function renameBank(id, name) {
+    const b = QBANKS.banks.find(x => x.id === id);
+    if (b) { b.name = (name || '').trim() || b.name; persistQBanks(); }
+}
+function deleteBank(id) {
+    const i = QBANKS.banks.findIndex(b => b.id === id);
+    if (i < 0) return;
+    QBANKS.banks.splice(i, 1);
+    if (QBANKS.activeId === id) QBANKS.activeId = QBANKS.banks[0] ? QBANKS.banks[0].id : null;
+    persistQBanks();
+    loadActiveIntoRuntime();
+    state.subjects = Object.keys(DATA);
+    state.currentSubject = state.subjects[0] || null;
+    state.currentType = state.currentSubject ? (getTypes(state.currentSubject)[0] || null) : null;
+    state.currentIndex = 0;
 }
 // 弹出文件选择器导入题库
 function pickQBankFile() {
@@ -241,32 +349,34 @@ function pickQBankFile() {
         const f = inp.files && inp.files[0];
         if (!f) return;
         const r = new FileReader();
-        r.onload = function () { applyImport(String(r.result)); };
+        const fname = (f.name || '').replace(/\.(json|txt)$/i, '');
+        r.onload = function () { applyImport(String(r.result), fname); };
         r.onerror = function () { alert('读取文件失败，请重试'); };
         r.readAsText(f, 'utf-8');
     });
     inp.click();
 }
-// 应用导入的题库文本并刷新界面
-function applyImport(text) {
-    const err = importQBank(text);
+// 应用导入的题库文本（新增题库）并刷新界面
+function applyImport(text, name) {
+    const err = importQBank(text, name);
     if (err) { alert(err); return; }
     state.subjects = Object.keys(DATA);
     state.currentSubject = state.subjects[0];
     state.currentType = getTypes(state.currentSubject)[0] || null;
     state.currentIndex = 0;
     let n = 0; for (const s in DATA) for (const t in DATA[s].types) n += DATA[s].types[t].length;
-    alert('题库导入成功！共 ' + state.subjects.length + ' 个科目、' + n + ' 道题。');
+    alert('题库导入成功！共 ' + state.subjects.length + ' 个科目、' + n + ' 道题。\n已存为「' + (activeBank() ? activeBank().name : '新题库') + '」，可在「题库」里随时切换。');
     render();
 }
 
 // ================================================================
 // 题库编辑（应用内加题/改题/删题/导出，全部存本机，不上传）
 // ================================================================
-// 把当前题库写回本地存储
+// 把当前题库（含应用内编辑）写回本地存储的当前题库条目
 function saveQBank() {
-    try { localStorage.setItem(QBANK_KEY, JSON.stringify({ DATA, PASSAGES })); return true; }
-    catch (e) { alert('保存失败：设备存储空间可能不足'); return false; }
+    const b = activeBank();
+    if (b) { b.DATA = DATA; b.PASSAGES = PASSAGES; }
+    return persistQBanks();
 }
 // 为新题生成不重复的 id
 function genQid(subject, type) {
@@ -286,6 +396,56 @@ function exportQBank() {
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) { alert('导出失败，请重试'); }
 }
+// 题库管理：切换 / 重命名 / 删除 / 导入新题库
+function openBankManager() {
+    let html = '<span class="ov-close" id="ovClose">✕</span>';
+    html += '<h2>📚 题库切换 / 管理</h2>';
+    html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">所有题库都只存在你这台设备上，不会上传。可同时保存多个，点一下即可切换。</div>';
+    if (!QBANKS.banks.length) {
+        html += '<div style="font-size:13px;color:var(--text-muted);margin:8px 0 14px;">还没有题库，点下面按钮导入。</div>';
+    } else {
+        html += '<div id="bankList">';
+        QBANKS.banks.forEach(b => {
+            let n = 0; for (const s in b.DATA) for (const t in b.DATA[s].types) n += b.DATA[s].types[t].length;
+            const subN = Object.keys(b.DATA || {}).length;
+            const active = b.id === QBANKS.activeId;
+            html += `<div class="bank-row${active ? ' active' : ''}" data-id="${b.id}">
+                <div class="bank-main" data-act="switch" data-id="${b.id}">
+                    <div class="bank-name">${active ? '✅ ' : ''}${escapeHtml(b.name)}</div>
+                    <div class="bank-sub">${subN} 科 · ${n} 题${active ? ' · 当前使用' : ''}</div>
+                </div>
+                <button class="bank-op" data-act="rename" data-id="${b.id}">✏️</button>
+                <button class="bank-op" data-act="del" data-id="${b.id}">🗑️</button>
+            </div>`;
+        });
+        html += '</div>';
+    }
+    html += `<button class="nav-btn next" id="bankImport" style="margin-top:14px;">📥 导入新题库（不会覆盖现有的）</button>`;
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    document.getElementById('bankImport').onclick = function () { closeOverlay(); pickQBankFile(); };
+    document.querySelectorAll('#bankList [data-act]').forEach(el => {
+        el.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const id = this.dataset.id, act = this.dataset.act;
+            if (act === 'switch') {
+                if (id !== QBANKS.activeId) switchBank(id);
+                else closeOverlay();
+            } else if (act === 'rename') {
+                const b = QBANKS.banks.find(x => x.id === id);
+                const nv = prompt('给这个题库改个名字：', b ? b.name : '');
+                if (nv !== null) { renameBank(id, nv); openBankManager(); }
+            } else if (act === 'del') {
+                const b = QBANKS.banks.find(x => x.id === id);
+                if (confirm('确定删除题库「' + (b ? b.name : '') + '」吗？此操作不可撤销（不影响答题进度记录）。')) {
+                    deleteBank(id);
+                    if (QBANKS.banks.length) { openBankManager(); render(); }
+                    else { closeOverlay(); render(); }
+                }
+            }
+        });
+    });
+}
 // 删除一道题（连带清理该题相关的答题/收藏/复习状态；空题型/空科目一并移除）
 function deleteCurrentQuestion(subject, type, id) {
     const arr = (DATA[subject] && DATA[subject].types[type]) || null;
@@ -294,7 +454,7 @@ function deleteCurrentQuestion(subject, type, id) {
     if (i < 0) return;
     arr.splice(i, 1);
     const key = qkey(subject, type, id);
-    ['answers', 'pending', 'blankInput', 'showExplanation', 'showTranslation', 'favorites', 'reviewPool'].forEach(f => { delete state[f][key]; });
+    ['answers', 'pending', 'blankInput', 'showExplanation', 'showBeginner', 'showTranslation', 'favorites', 'reviewPool'].forEach(f => { delete state[f][key]; });
     if (arr.length === 0) delete DATA[subject].types[type];
     if (DATA[subject] && Object.keys(DATA[subject].types).length === 0) delete DATA[subject];
     state.subjects = Object.keys(DATA);
@@ -343,6 +503,14 @@ function openQuestionEditor(mode, subject, type, id) {
         const newItem = { id: (mode === 'edit' ? id : genQid(ns, nt)), question: nq, answer: na };
         if (optLines.length) newItem.options = optLines;
         if (ne) newItem.explanation = ne;
+        // 保留编辑器没有管理的附加字段（零基础详解、翻译、文章引用等），改题时不丢失
+        if (mode === 'edit') {
+            const origArr = (DATA[subject] && DATA[subject].types[type]) || [];
+            const orig = origArr.find(x => x.id === id);
+            if (orig) ['beginner', 'translation', 'options_translation', 'passage_translation', 'passageRef'].forEach(k => {
+                if (orig[k] !== undefined) newItem[k] = orig[k];
+            });
+        }
         if (!DATA[ns]) DATA[ns] = { types: {} };
         if (!DATA[ns].types[nt]) DATA[ns].types[nt] = [];
         if (mode === 'edit' && (ns !== subject || nt !== type)) {
@@ -384,6 +552,7 @@ const state = {
     currentIndex: 0,
     answers: {},
     showExplanation: {},
+    showBeginner: {},
     showTranslation: {},
     studyMode: false,
     wrongOnly: false,
@@ -434,7 +603,7 @@ function isDue(key) {
 // ================================================================
 const STORAGE_KEY = 'shuatibao_v1';
 // 需要记忆的字段（其余如 subjects 由题库派生，不持久化）
-const PERSIST_FIELDS = ['answers', 'showExplanation', 'showTranslation',
+const PERSIST_FIELDS = ['answers', 'showExplanation', 'showBeginner', 'showTranslation',
     'currentSubject', 'currentType', 'currentIndex',
     'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode',
     'favorites', 'favOnly', 'reviewPool', 'studyDays', 'exam', 'fontScale', 'vocab',
@@ -624,6 +793,22 @@ function toggleExplanation(subject, type, id) {
     const key = subject + '-' + type + '-' + id;
     state.showExplanation[key] = !state.showExplanation[key];
 }
+function isBeginnerShown(subject, type, id) {
+    return !!state.showBeginner[subject + '-' + type + '-' + id];
+}
+// 零基础详解是否展示：数学题默认展开，其它科目默认收起；用户手动点过则以其选择为准
+function beginnerVisible(subject, type, id, isMath) {
+    const key = subject + '-' + type + '-' + id;
+    if (key in state.showBeginner) return state.showBeginner[key];
+    return !!isMath;
+}
+function setBeginner(subject, type, id, val) {
+    state.showBeginner[subject + '-' + type + '-' + id] = val;
+}
+function toggleBeginner(subject, type, id) {
+    const key = subject + '-' + type + '-' + id;
+    state.showBeginner[key] = !state.showBeginner[key];
+}
 function qkey(subject, type, id) { return subject + '-' + type + '-' + id; }
 
 // —— 答题记录（集中处理：存答案 + 更新强化队列 + 打卡）——
@@ -731,6 +916,49 @@ function updateProgress() {
     const total = getTotalQuestions(state.currentSubject);
     const answered = getAnsweredCount(state.currentSubject);
     document.getElementById('progressText').textContent = `${answered} / ${total}`;
+    updateBottomNav();
+}
+// 底部导航栏高亮当前所在模式
+function updateBottomNav() {
+    const set = (id, on) => { const el = document.getElementById(id); if (el) el.classList.toggle('active', !!on); };
+    const browsing = !state.wrongOnly && !state.favOnly && !state.reviewMode;
+    set('bnHome', browsing);
+    set('bnWrong', state.wrongOnly);
+    set('bnFav', state.favOnly);
+    set('bnReview', state.reviewMode);
+}
+// 「更多」面板：把不常用功能 + 题库/数据/设置集中到这里（复用顶部隐藏按钮的已有逻辑）
+function openMoreSheet() {
+    const item = (icon, label, sub) => `<button class="more-item" data-k="${label}"><span class="more-ico">${icon}</span><span><span class="more-label">${label}</span>${sub ? `<span class="more-sub">${sub}</span>` : ''}</span></button>`;
+    let html = '<span class="ov-close" id="ovClose">✕</span><h2>☰ 更多功能</h2>';
+    html += '<div class="more-grid">';
+    html += item('📚', '题库', '切换/导入/管理');
+    html += item(state.studyMode ? '📖' : '📕', '学习模式', state.studyMode ? '已开启' : '已关闭');
+    html += item('📝', '模考', '');
+    html += item('🔍', '搜索', '');
+    html += item('✏️', '草稿纸', '');
+    html += item('📈', '统计', '薄弱点分析');
+    html += item('🎲', '随机', '打乱本组顺序');
+    html += item('📒', '生词本', '');
+    html += item(state.darkMode ? '☀️' : '🌙', '夜间模式', state.darkMode ? '已开启' : '已关闭');
+    html += '</div>';
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    const click = id => { const el = document.getElementById(id); if (el) el.click(); };
+    const acts = {
+        '题库': () => { closeOverlay(); openBankManager(); },
+        '学习模式': () => { closeOverlay(); click('modeToggle'); },
+        '模考': () => { closeOverlay(); click('examBtn'); },
+        '搜索': () => { closeOverlay(); click('searchBtn'); },
+        '草稿纸': () => { closeOverlay(); click('scratchBtn'); },
+        '统计': () => { closeOverlay(); click('statsBtn'); },
+        '随机': () => { closeOverlay(); click('shuffleBtn'); },
+        '生词本': () => { closeOverlay(); renderVocabBook(); },
+        '夜间模式': () => { closeOverlay(); click('darkToggle'); }
+    };
+    document.querySelectorAll('.more-item').forEach(b => b.addEventListener('click', function () {
+        const fn = acts[this.dataset.k]; if (fn) fn();
+    }));
 }
 
 // —— 数学公式渲染（KaTeX 加载完成后才生效；用 $...$ 包裹 LaTeX）——
@@ -1129,6 +1357,19 @@ function renderQuestion() {
         `;
     }
 
+    if (q.beginner) {
+        const showBeg = beginnerVisible(qSubject, qType, q.id, isMath);
+        html += `<div class="flex-row" style="margin-top:8px;">
+                <button class="toggle-answer-btn ${showBeg ? 'active' : ''}" id="beginnerBtn" style="background:#fef9c3;color:#854d0e;border-color:#fde047;">${showBeg ? '🔰 收起零基础详解' : '🔰 零基础详解'}</button>
+            </div>`;
+        if (showBeg) {
+            html += `<div class="explanation show" style="border-left-color:#f59e0b;">
+                <div class="title" style="color:#b45309;">🔰 零基础详解（没学过也能看懂）</div>
+                <div class="content math" style="white-space:pre-wrap;">${escapeHtml(q.beginner)}</div>
+            </div>`;
+        }
+    }
+
     if (!state.studyMode) {
         html += `
             <div class="flex-row" style="margin-top:10px;gap:6px;flex-wrap:wrap;">
@@ -1173,7 +1414,7 @@ function renderQuestion() {
                 <button id="menuAddQ" style="margin-top:2px;">➕ 加一道题</button>
                 <button id="menuEditQ" style="margin-top:2px;">✏️ 改这道题</button>
                 <button id="menuExportQBank" style="margin-top:2px;">💾 导出题库（备份）</button>
-                <button id="menuImportQBank" style="margin-top:4px;">📚 导入/更换题库</button>
+                <button id="menuImportQBank" style="margin-top:4px;">📚 题库切换 / 管理</button>
                 <button id="resetAllData" style="color:#ef4444;margin-top:4px;">🗑️ 重置所有进度</button>
             </div>
         </div>
@@ -1264,6 +1505,13 @@ function renderQuestion() {
             render();
         });
     }
+
+    // 零基础详解（学习模式下也可用，故放在 studyMode 判断之外）
+    document.getElementById('beginnerBtn')?.addEventListener('click', () => {
+        const cur = beginnerVisible(qSubject, qType, q.id, isMath);
+        setBeginner(qSubject, qType, q.id, !cur);
+        render();
+    });
 
     // 收藏星标
     document.getElementById('favBtn')?.addEventListener('click', () => {
@@ -1362,12 +1610,13 @@ function renderQuestion() {
     });
     document.getElementById('menuImportQBank')?.addEventListener('click', function() {
         dataMenu.classList.remove('show');
-        pickQBankFile();
+        openBankManager();
     });
     document.getElementById('resetAllData')?.addEventListener('click', function() {
         if (confirm('确定要重置所有科目的答题进度吗？此操作不可撤销！')) {
             state.answers = {};
             state.showExplanation = {};
+            state.showBeginner = {};
             state.showTranslation = {};
             state.shuffledIndices = {};
             state.shuffled = false;
@@ -1723,6 +1972,17 @@ function init() {
         state.darkMode = !state.darkMode;
         render();
     });
+
+    // —— 底部导航栏（复用顶部隐藏按钮的逻辑）——
+    document.getElementById('bnHome').addEventListener('click', function() {
+        state.wrongOnly = false; state.favOnly = false; state.reviewMode = false;
+        state.currentIndex = 0;
+        render();
+    });
+    document.getElementById('bnWrong').addEventListener('click', () => document.getElementById('wrongToggle').click());
+    document.getElementById('bnFav').addEventListener('click', () => document.getElementById('favToggle').click());
+    document.getElementById('bnReview').addEventListener('click', () => document.getElementById('reviewToggle').click());
+    document.getElementById('bnMore').addEventListener('click', openMoreSheet);
 }
 
 init();
