@@ -221,7 +221,8 @@
     <div class="header">
         <div class="header-top">
             <h1>📖 刷题宝 <span>· 完整版</span></h1>
-            <div style="display:flex;align-items:center;gap:6px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+                <span class="progress-text" id="studyBadgeTop" style="display:none;background:rgba(255,255,255,0.32);">📖 学习中</span>
                 <span class="progress-text" id="streakText" style="background:rgba(255,200,0,0.25);">🔥 0 天</span>
                 <span class="progress-text" id="progressText">0 / 0</span>
             </div>
@@ -722,6 +723,21 @@ function nextTypeTarget() {
     }
     return null;
 }
+// 与 nextTypeTarget 对称：上一个该去的 {subject, type}；到顶返回 null
+function prevTypeTarget() {
+    const subs = state.subjects;
+    const types = getTypes(state.currentSubject);
+    const ti = types.indexOf(state.currentType);
+    if (ti > 0) return { subject: state.currentSubject, type: types[ti - 1] };
+    const si = subs.indexOf(state.currentSubject);
+    for (let i = si - 1; i >= 0; i--) {
+        const t = getTypes(subs[i]);
+        if (t.length) return { subject: subs[i], type: t[t.length - 1] };
+    }
+    return null;
+}
+// 切题后把页面滚回顶部（body 为滚动容器，topnav 为 sticky 会保持可见）
+function scrollTopSoft() { try { window.scrollTo({ top: 0 }); } catch (e) { window.scrollTo(0, 0); } }
 // 按范围清答题进度：type 给定=本组，type 为 null=整个科目。保留收藏与复习队列。
 function resetScope(subject, type) {
     const qPrefix = type ? (subject + '-' + type + '-') : (subject + '-');
@@ -1120,7 +1136,7 @@ function openThemePicker() {
     if (hasBg) {
         // 滑块值 = 图的清晰度（越大越清晰）= 1 - 遮罩不透明度
         const clarity = Math.round((1 - state.bgAlpha) * 100);
-        html += `<div style="font-size:12px;color:var(--text-muted);margin:6px 0 2px;">背景浓淡（往右图更清楚 · 当前 ${clarity}%）</div>`;
+        html += `<div id="bgAlphaLabel" style="font-size:12px;color:var(--text-muted);margin:6px 0 2px;">背景浓淡（往右图更清楚 · 当前 ${clarity}%）</div>`;
         html += `<input type="range" id="bgAlpha" min="5" max="70" step="5" value="${clarity}" style="width:100%;">`;
         html += `<button class="toggle-answer-btn" id="bgClear" style="background:#fee2e2;color:#b91c1c;margin-top:8px;">清除背景图</button>`;
     }
@@ -1135,6 +1151,8 @@ function openThemePicker() {
     const sl = document.getElementById('bgAlpha');
     if (sl) sl.addEventListener('input', function () {
         state.bgAlpha = 1 - (parseInt(this.value, 10) / 100);
+        const lbl = document.getElementById('bgAlphaLabel');
+        if (lbl) lbl.textContent = '背景浓淡（往右图更清楚 · 当前 ' + this.value + '%）';
         applyCustomBg();
         saveState();
     });
@@ -1177,14 +1195,17 @@ function updateToolbar() {
     const wrongBtn = document.getElementById('wrongToggle');
     const darkBtn = document.getElementById('darkToggle');
     const badge = document.getElementById('modeBadge');
+    const studyTop = document.getElementById('studyBadgeTop');
     if (state.studyMode) {
         modeBtn.textContent = '📖 学习模式 (开)';
         modeBtn.classList.add('active');
         badge.style.display = 'inline-block';
+        if (studyTop) studyTop.style.display = 'inline-block';
     } else {
         modeBtn.textContent = '📖 学习模式 (关)';
         modeBtn.classList.remove('active');
         badge.style.display = 'none';
+        if (studyTop) studyTop.style.display = 'none';
     }
     if (state.wrongOnly) {
         wrongBtn.classList.add('active');
@@ -1217,6 +1238,9 @@ function updateToolbar() {
 function render() {
     applyFontScale();
     applyTheme();
+    // 模考中 / 未导入题库的引导页：隐藏底部导航，避免误触
+    const bn = document.getElementById('bottomNav');
+    if (bn) bn.style.display = (hasQBank() && !state.exam) ? '' : 'none';
     if (!hasQBank()) { renderImportScreen(); saveState(); return; }
     if (state.exam) { renderExam(); updateToolbar(); saveState(); return; }
     renderSubjectTabs();
@@ -1271,6 +1295,7 @@ function renderSubjectTabs() {
                 state.currentType = types.length > 0 ? types[0] : null;
                 state.currentIndex = 0;
                 render();
+                scrollTopSoft();
             }
         });
     });
@@ -1291,6 +1316,7 @@ function renderTypeFilters() {
                 state.currentType = type;
                 state.currentIndex = 0;
                 render();
+                scrollTopSoft();
             }
         });
     });
@@ -1531,19 +1557,21 @@ function renderQuestion() {
         html += `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">📖 学习模式中，答案已显示，点击无效</div>`;
     }
 
-    // 普通浏览模式下，最后一题把「下一题」变成「下一题型 ➔」自动衔接下一组
+    // 普通浏览模式下，最后一题把「下一题」变成「下一题型 ➔」、第一题把「上一题」变成「⬅ 上一题型」，自动衔接相邻组
     const onLast = state.currentIndex === total - 1;
+    const onFirst = state.currentIndex === 0;
     const browsing = !state.wrongOnly && !state.favOnly && !state.reviewMode;
     const groupTarget = (onLast && browsing) ? nextTypeTarget() : null;
-    let nextBtnHtml;
-    if (groupTarget) {
-        nextBtnHtml = `<button class="nav-btn next" id="nextGroupBtn">下一题型 ➔</button>`;
-    } else {
-        nextBtnHtml = `<button class="nav-btn next" id="nextBtn" ${onLast ? 'disabled' : ''}>下一题 ➔</button>`;
-    }
+    const prevGroupTarget = (onFirst && browsing) ? prevTypeTarget() : null;
+    const nextBtnHtml = groupTarget
+        ? `<button class="nav-btn next" id="nextGroupBtn">下一题型 ➔</button>`
+        : `<button class="nav-btn next" id="nextBtn" ${onLast ? 'disabled' : ''}>下一题 ➔</button>`;
+    const prevBtnHtml = prevGroupTarget
+        ? `<button class="nav-btn prev" id="prevGroupBtn">⬅ 上一题型</button>`
+        : `<button class="nav-btn prev" id="prevBtn" ${onFirst ? 'disabled' : ''}>⬅ 上一题</button>`;
     html += `
         <div class="nav-area">
-            <button class="nav-btn prev" id="prevBtn" ${state.currentIndex === 0 ? 'disabled' : ''}>⬅ 上一题</button>
+            ${prevBtnHtml}
             ${nextBtnHtml}
         </div>
     `;
@@ -1593,6 +1621,7 @@ function renderQuestion() {
             if (!isNaN(idx)) {
                 state.currentIndex = idx;
                 render();
+                scrollTopSoft();
             }
         });
     });
@@ -1699,6 +1728,7 @@ function renderQuestion() {
         if (state.currentIndex > 0) {
             state.currentIndex--;
             render();
+            scrollTopSoft();
         }
     });
     document.getElementById('nextBtn')?.addEventListener('click', () => {
@@ -1706,6 +1736,7 @@ function renderQuestion() {
         if (state.currentIndex < questions.length - 1) {
             state.currentIndex++;
             render();
+            scrollTopSoft();
         }
     });
     document.getElementById('nextGroupBtn')?.addEventListener('click', () => {
@@ -1715,6 +1746,18 @@ function renderQuestion() {
             state.currentType = t.type;
             state.currentIndex = 0;
             render();
+            scrollTopSoft();
+        }
+    });
+    document.getElementById('prevGroupBtn')?.addEventListener('click', () => {
+        const t = prevTypeTarget();
+        if (t) {
+            state.currentSubject = t.subject;
+            state.currentType = t.type;
+            const qs = getFilteredQuestions(t.subject, t.type);
+            state.currentIndex = Math.max(0, qs.length - 1);
+            render();
+            scrollTopSoft();
         }
     });
 
