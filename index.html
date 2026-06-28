@@ -29,6 +29,28 @@
             --border-color: #475569; --shadow: 0 0 30px rgba(0,0,0,0.4);
             --header-gradient: linear-gradient(135deg, #1e1b4b, #4c1d95); --tag-bg: #475569;
         }
+        /* 魔女之旅 · 伊蕾娜配色（灰紫/薰衣草/紫罗兰/金，纯配色不含官方图） */
+        body.theme-witch {
+            --bg-body: #e9e7f3; --bg-app: #faf9fe; --bg-card: #f1eef9;
+            --text-primary: #322c46; --text-secondary: #4e4659; --text-muted: #8a82a3;
+            --border-color: #ddd6ec; --shadow: 0 0 30px rgba(78,70,89,0.12);
+            --header-gradient: linear-gradient(135deg, #6469cc, #4e4659); --tag-bg: #e7e2f4;
+            --accent: #6469cc; --accent-soft: #eceaf9;
+        }
+        body.theme-witch .subject-tab.active,
+        body.theme-witch .toolbar .btn-sm.active { background: #6469cc !important; border-color: #6469cc !important; box-shadow: 0 2px 8px rgba(100,105,204,0.35); }
+        body.theme-witch .type-btn.active { background: #eceaf9 !important; color: #6469cc !important; border-color: #6469cc !important; }
+        body.theme-witch .nav-btn.next, body.theme-witch .toggle-answer-btn.active { background: #6469cc !important; border-color: #6469cc !important; }
+        body.theme-witch .bottomnav button.active { color: #6469cc !important; }
+        /* 魔女之旅头部点缀几颗星 */
+        body.theme-witch .header { background-image: var(--header-gradient), radial-gradient(2px 2px at 18% 30%, rgba(255,255,255,0.9), transparent), radial-gradient(1.5px 1.5px at 70% 22%, rgba(255,255,255,0.8), transparent), radial-gradient(1.5px 1.5px at 88% 60%, rgba(255,255,255,0.7), transparent); }
+        /* 自定义背景图：图铺在 body，#app 与卡片半透明保证可读 */
+        body.has-bg { background-size: cover; background-position: center; background-attachment: fixed; }
+        body.has-bg #app { background: rgba(255,255,255,var(--bg-overlay-alpha,0.82)); backdrop-filter: blur(3px); }
+        body.has-bg.dark #app { background: rgba(15,23,42,var(--bg-overlay-alpha,0.82)); }
+        body.has-bg.theme-witch #app { background: rgba(250,249,254,var(--bg-overlay-alpha,0.82)); }
+        body.has-bg .topnav, body.has-bg .bottomnav { background: transparent; }
+        body.has-bg .question-card, body.has-bg .essay-box, body.has-bg .explanation { backdrop-filter: blur(2px); }
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg-body); color: var(--text-primary); padding: 0 env(safe-area-inset-right) calc(80px + env(safe-area-inset-bottom)) env(safe-area-inset-left); min-height: 100vh; min-height: 100dvh; display: flex; justify-content: center; transition: background 0.3s, color 0.3s; }
         #app { max-width: 480px; width: 100%; background: var(--bg-app); min-height: 100vh; min-height: 100dvh; box-shadow: var(--shadow); position: relative; transition: background 0.3s; }
@@ -77,6 +99,12 @@
         .more-ico { font-size: 22px; line-height: 1; }
         .more-label { display: block; font-size: 13px; font-weight: 600; }
         .more-sub { display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+        /* 主题选择卡片 */
+        .theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .theme-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; border: 2px solid var(--border-color); border-radius: 12px; background: var(--bg-card); color: var(--text-primary); cursor: pointer; touch-action: manipulation; }
+        .theme-card.sel { border-color: #6469cc; }
+        .theme-prev { width: 100%; height: 46px; border-radius: 8px; }
+        .theme-name { font-size: 12px; font-weight: 600; }
         .question-area { padding: 12px 16px 20px; }
         .grid-container { margin-bottom: 12px; background: var(--bg-card); padding: 8px; border-radius: 10px; border: 1px solid var(--border-color); transition: background 0.3s; }
         .grid-title { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
@@ -559,6 +587,8 @@ const state = {
     shuffled: false,
     shuffledIndices: {},
     darkMode: false,
+    theme: 'default',     // 主题：default | dark | witch
+    bgAlpha: 0.82,        // 自定义背景图上方遮罩的不透明度（越小图越清晰）
     // —— 新功能状态 ——
     favorites: {},        // 收藏：key -> true
     favOnly: false,       // 只看收藏
@@ -605,7 +635,7 @@ const STORAGE_KEY = 'shuatibao_v1';
 // 需要记忆的字段（其余如 subjects 由题库派生，不持久化）
 const PERSIST_FIELDS = ['answers', 'showExplanation', 'showBeginner', 'showTranslation',
     'currentSubject', 'currentType', 'currentIndex',
-    'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode',
+    'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode', 'theme', 'bgAlpha',
     'favorites', 'favOnly', 'reviewPool', 'studyDays', 'exam', 'fontScale', 'vocab',
     'pending', 'blankInput'];
 
@@ -627,6 +657,9 @@ function loadState() {
     try { saved = JSON.parse(raw); } catch (e) { return; }
     if (!saved || typeof saved !== 'object') return;
     PERSIST_FIELDS.forEach(k => { if (saved[k] !== undefined) state[k] = saved[k]; });
+    // 迁移：旧存档只有 darkMode，没有 theme
+    if (saved.theme === undefined) state.theme = saved.darkMode ? 'dark' : 'default';
+    state.darkMode = (state.theme === 'dark');   // 保持二者一致，兼容其它读取 darkMode 的地方
 }
 // 题库可能变动：把恢复后的当前位置校正到合法范围，避免脏数据导致空白
 function applyStateValidation() {
@@ -675,6 +708,33 @@ function getTypeQuestions(subject, type) {
     return [];
 }
 function getTypes(subject) { return Object.keys(DATA[subject].types); }
+// 普通浏览模式下：当前题型做完后，下一个该去的 {subject, type}；到底返回 null
+function nextTypeTarget() {
+    const subs = state.subjects;
+    const types = getTypes(state.currentSubject);
+    const ti = types.indexOf(state.currentType);
+    if (ti >= 0 && ti < types.length - 1) return { subject: state.currentSubject, type: types[ti + 1] };
+    // 本科目题型已到底：找下一个有题型的科目
+    const si = subs.indexOf(state.currentSubject);
+    for (let i = si + 1; i < subs.length; i++) {
+        const t = getTypes(subs[i]);
+        if (t.length) return { subject: subs[i], type: t[0] };
+    }
+    return null;
+}
+// 按范围清答题进度：type 给定=本组，type 为 null=整个科目。保留收藏与复习队列。
+function resetScope(subject, type) {
+    const qPrefix = type ? (subject + '-' + type + '-') : (subject + '-');
+    ['answers', 'pending', 'blankInput', 'showExplanation', 'showBeginner', 'showTranslation'].forEach(f => {
+        Object.keys(state[f]).forEach(k => { if (k.startsWith(qPrefix)) delete state[f][k]; });
+    });
+    // shuffledIndices 的键是 subject-type（不含 id）
+    Object.keys(state.shuffledIndices).forEach(k => {
+        if (type ? (k === subject + '-' + type) : k.startsWith(subject + '-')) delete state.shuffledIndices[k];
+    });
+    state.currentIndex = 0;
+    render();
+}
 function getAllQuestions(subject) {
     let all = [];
     const types = DATA[subject].types;
@@ -940,7 +1000,8 @@ function openMoreSheet() {
     html += item('📈', '统计', '薄弱点分析');
     html += item('🎲', '随机', '打乱本组顺序');
     html += item('📒', '生词本', '');
-    html += item(state.darkMode ? '☀️' : '🌙', '夜间模式', state.darkMode ? '已开启' : '已关闭');
+    const themeName = { default: '默认', dark: '夜间', witch: '魔女之旅' }[state.theme] || '默认';
+    html += item('🎨', '主题', themeName);
     html += '</div>';
     showOverlay(html);
     document.getElementById('ovClose').onclick = closeOverlay;
@@ -954,7 +1015,7 @@ function openMoreSheet() {
         '统计': () => { closeOverlay(); click('statsBtn'); },
         '随机': () => { closeOverlay(); click('shuffleBtn'); },
         '生词本': () => { closeOverlay(); renderVocabBook(); },
-        '夜间模式': () => { closeOverlay(); click('darkToggle'); }
+        '主题': () => { closeOverlay(); openThemePicker(); }
     };
     document.querySelectorAll('.more-item').forEach(b => b.addEventListener('click', function () {
         const fn = acts[this.dataset.k]; if (fn) fn();
@@ -982,10 +1043,103 @@ function applyFontScale() {
     if (state.fontScale === 'small') document.body.classList.add('fs-small');
     else if (state.fontScale === 'large') document.body.classList.add('fs-large');
 }
-// —— 状态栏配色随夜间模式 ——
+// —— 主题：切换 body 类 + 状态栏配色 ——
+const THEME_COLORS = { default: '#4f46e5', dark: '#1e1b4b', witch: '#6469cc' };
+function applyTheme() {
+    document.body.classList.remove('dark', 'theme-witch');
+    if (state.theme === 'dark') document.body.classList.add('dark');
+    else if (state.theme === 'witch') document.body.classList.add('theme-witch');
+    state.darkMode = (state.theme === 'dark');
+    applyThemeColor();
+}
 function applyThemeColor() {
     const m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute('content', state.darkMode ? '#1e1b4b' : '#4f46e5');
+    if (m) m.setAttribute('content', THEME_COLORS[state.theme] || THEME_COLORS.default);
+}
+// —— 自定义背景图（独立存储，不进 state 序列化，避免大字符串反复写入）——
+const BG_KEY = 'shuatibao_bg_v1';
+function applyCustomBg() {
+    let url;
+    try { url = localStorage.getItem(BG_KEY); } catch (e) { url = null; }
+    document.body.style.setProperty('--bg-overlay-alpha', state.bgAlpha);
+    if (url) { document.body.style.backgroundImage = `url("${url}")`; document.body.classList.add('has-bg'); }
+    else { document.body.style.backgroundImage = ''; document.body.classList.remove('has-bg'); }
+}
+function clearCustomBg() {
+    try { localStorage.removeItem(BG_KEY); } catch (e) {}
+    applyCustomBg();
+}
+// 选图 → canvas 压缩（长边≤1080，JPEG~0.8）→ 存本机
+function pickBgImage() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    inp.addEventListener('change', function () {
+        const f = inp.files && inp.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = function () {
+            const img = new Image();
+            img.onload = function () {
+                const max = 1080;
+                let w = img.width, h = img.height;
+                if (Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
+                const cv = document.createElement('canvas');
+                cv.width = w; cv.height = h;
+                cv.getContext('2d').drawImage(img, 0, 0, w, h);
+                let dataURL;
+                try { dataURL = cv.toDataURL('image/jpeg', 0.8); } catch (e) { alert('这张图无法处理，换一张试试'); return; }
+                try { localStorage.setItem(BG_KEY, dataURL); }
+                catch (e) { alert('图太大，存不下了。换一张更小的图，或先清掉其它数据。'); return; }
+                applyCustomBg();
+                closeOverlay();
+            };
+            img.onerror = function () { alert('读取图片失败，换一张试试'); };
+            img.src = String(r.result);
+        };
+        r.onerror = function () { alert('读取文件失败，请重试'); };
+        r.readAsDataURL(f);
+    });
+    inp.click();
+}
+// 主题选择浮层
+function openThemePicker() {
+    const hasBg = !!(function () { try { return localStorage.getItem(BG_KEY); } catch (e) { return null; } })();
+    const swatch = (key, name, c1, c2) => `
+        <button class="theme-card${state.theme === key ? ' sel' : ''}" data-theme="${key}">
+            <span class="theme-prev" style="background:linear-gradient(135deg,${c1},${c2});"></span>
+            <span class="theme-name">${name}</span>
+        </button>`;
+    let html = '<span class="ov-close" id="ovClose">✕</span><h2>🎨 主题</h2>';
+    html += '<div class="theme-grid">';
+    html += swatch('default', '默认', '#4f46e5', '#7c3aed');
+    html += swatch('dark', '夜间', '#1e1b4b', '#4c1d95');
+    html += swatch('witch', '魔女之旅', '#6469cc', '#4e4659');
+    html += '</div>';
+    html += '<div style="font-size:12px;color:var(--text-muted);margin:14px 0 6px;">自定义背景图（只存你手机本地，不上传）</div>';
+    html += `<button class="nav-btn next" id="bgPick" style="margin-bottom:8px;">🖼️ 选择背景图</button>`;
+    if (hasBg) {
+        // 滑块值 = 图的清晰度（越大越清晰）= 1 - 遮罩不透明度
+        const clarity = Math.round((1 - state.bgAlpha) * 100);
+        html += `<div style="font-size:12px;color:var(--text-muted);margin:6px 0 2px;">背景浓淡（往右图更清楚 · 当前 ${clarity}%）</div>`;
+        html += `<input type="range" id="bgAlpha" min="5" max="70" step="5" value="${clarity}" style="width:100%;">`;
+        html += `<button class="toggle-answer-btn" id="bgClear" style="background:#fee2e2;color:#b91c1c;margin-top:8px;">清除背景图</button>`;
+    }
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    document.querySelectorAll('.theme-card').forEach(b => b.addEventListener('click', function () {
+        state.theme = this.dataset.theme;
+        render();
+        openThemePicker();   // 重开以更新选中态
+    }));
+    document.getElementById('bgPick').onclick = pickBgImage;
+    const sl = document.getElementById('bgAlpha');
+    if (sl) sl.addEventListener('input', function () {
+        state.bgAlpha = 1 - (parseInt(this.value, 10) / 100);
+        applyCustomBg();
+        saveState();
+    });
+    const bc = document.getElementById('bgClear');
+    if (bc) bc.onclick = function () { clearCustomBg(); openThemePicker(); };
 }
 // —— 英语生词 ——
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -1053,13 +1207,8 @@ function updateToolbar() {
     }
     const streakEl = document.getElementById('streakText');
     if (streakEl) streakEl.textContent = '🔥 ' + studyStreak() + ' 天';
-    if (state.darkMode) {
-        document.body.classList.add('dark');
-        darkBtn.textContent = '☀️ 白天';
-    } else {
-        document.body.classList.remove('dark');
-        darkBtn.textContent = '🌙 夜间';
-    }
+    // 主题在 render() 开头由 applyTheme() 统一处理；这里只更新隐藏的夜间按钮文案（兼容）
+    if (darkBtn) darkBtn.textContent = (state.theme === 'dark') ? '☀️ 白天' : '🌙 夜间';
 }
 
 // ================================================================
@@ -1067,7 +1216,7 @@ function updateToolbar() {
 // ================================================================
 function render() {
     applyFontScale();
-    applyThemeColor();
+    applyTheme();
     if (!hasQBank()) { renderImportScreen(); saveState(); return; }
     if (state.exam) { renderExam(); updateToolbar(); saveState(); return; }
     renderSubjectTabs();
@@ -1382,10 +1531,20 @@ function renderQuestion() {
         html += `<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">📖 学习模式中，答案已显示，点击无效</div>`;
     }
 
+    // 普通浏览模式下，最后一题把「下一题」变成「下一题型 ➔」自动衔接下一组
+    const onLast = state.currentIndex === total - 1;
+    const browsing = !state.wrongOnly && !state.favOnly && !state.reviewMode;
+    const groupTarget = (onLast && browsing) ? nextTypeTarget() : null;
+    let nextBtnHtml;
+    if (groupTarget) {
+        nextBtnHtml = `<button class="nav-btn next" id="nextGroupBtn">下一题型 ➔</button>`;
+    } else {
+        nextBtnHtml = `<button class="nav-btn next" id="nextBtn" ${onLast ? 'disabled' : ''}>下一题 ➔</button>`;
+    }
     html += `
         <div class="nav-area">
             <button class="nav-btn prev" id="prevBtn" ${state.currentIndex === 0 ? 'disabled' : ''}>⬅ 上一题</button>
-            <button class="nav-btn next" id="nextBtn" ${state.currentIndex === total - 1 ? 'disabled' : ''}>下一题 ➔</button>
+            ${nextBtnHtml}
         </div>
     `;
 
@@ -1416,6 +1575,9 @@ function renderQuestion() {
                 <button id="menuEditQ" style="margin-top:2px;">✏️ 改这道题</button>
                 <button id="menuExportQBank" style="margin-top:2px;">💾 导出题库（备份）</button>
                 <button id="menuImportQBank" style="margin-top:4px;">📚 题库切换 / 管理</button>
+                <div style="font-size:12px;color:var(--text-muted);margin:6px 0 2px;">重做（清进度重新刷）</div>
+                <button id="redoType" style="margin-top:2px;">🔁 重做本组（当前题型）</button>
+                <button id="redoSubject" style="margin-top:2px;">🔁 重做本科目</button>
                 <button id="resetAllData" style="color:#ef4444;margin-top:4px;">🗑️ 重置所有进度</button>
             </div>
         </div>
@@ -1546,6 +1708,15 @@ function renderQuestion() {
             render();
         }
     });
+    document.getElementById('nextGroupBtn')?.addEventListener('click', () => {
+        const t = nextTypeTarget();
+        if (t) {
+            state.currentSubject = t.subject;
+            state.currentType = t.type;
+            state.currentIndex = 0;
+            render();
+        }
+    });
 
     // 数据菜单
     const statsBar = document.getElementById('statsBar');
@@ -1612,6 +1783,20 @@ function renderQuestion() {
     document.getElementById('menuImportQBank')?.addEventListener('click', function() {
         dataMenu.classList.remove('show');
         openBankManager();
+    });
+    document.getElementById('redoType')?.addEventListener('click', function() {
+        dataMenu.classList.remove('show');
+        if (confirm('重做本组：清空「' + qSubject + ' · ' + qType + '」的答题进度并从头开始？\n（收藏和复习队列不受影响）')) {
+            resetScope(qSubject, qType);
+            alert('已清空本组进度，可以重新刷了');
+        }
+    });
+    document.getElementById('redoSubject')?.addEventListener('click', function() {
+        dataMenu.classList.remove('show');
+        if (confirm('重做本科目：清空「' + qSubject + '」全部题型的答题进度并从头开始？\n（收藏和复习队列不受影响）')) {
+            resetScope(qSubject, null);
+            alert('已清空本科目进度，可以重新刷了');
+        }
     });
     document.getElementById('resetAllData')?.addEventListener('click', function() {
         if (confirm('确定要重置所有科目的答题进度吗？此操作不可撤销！')) {
@@ -1970,9 +2155,10 @@ function init() {
         reshuffleCurrent();
     });
     document.getElementById('darkToggle').addEventListener('click', function() {
-        state.darkMode = !state.darkMode;
+        state.theme = (state.theme === 'dark') ? 'default' : 'dark';
         render();
     });
+    applyCustomBg();   // 启动时套用已保存的自定义背景图
 
     // —— 底部导航栏（复用顶部隐藏按钮的逻辑）——
     document.getElementById('bnHome').addEventListener('click', function() {
