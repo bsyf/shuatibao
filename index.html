@@ -12,6 +12,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="刷题宝">
+    <!-- 数学公式渲染 KaTeX（首次联网加载后由 Service Worker 缓存，可离线）。题库里用 $...$ 包裹 LaTeX 即自动渲染 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <style>
         :root {
             --bg-body: #f5f7fb; --bg-app: #ffffff; --bg-card: #f8fafc;
@@ -175,9 +179,11 @@
     <div class="toolbar" id="toolbar">
         <button class="btn-sm" id="modeToggle">📖 学习模式 (关)</button>
         <button class="btn-sm danger" id="wrongToggle">❌ 错题本</button>
-        <button class="btn-sm" id="reviewToggle">🔁 强化错题</button>
+        <button class="btn-sm" id="reviewToggle">📅 今日复习</button>
         <button class="btn-sm" id="favToggle">⭐ 收藏夹</button>
         <button class="btn-sm" id="examBtn">📝 模考</button>
+        <button class="btn-sm" id="searchBtn">🔍 搜索</button>
+        <button class="btn-sm" id="scratchBtn">✏️ 草稿</button>
         <button class="btn-sm" id="statsBtn">📈 统计</button>
         <button class="btn-sm btn-shuffle" id="shuffleBtn">🎲 随机</button>
         <button class="btn-sm btn-dark" id="darkToggle">🌙 夜间</button>
@@ -255,6 +261,120 @@ function applyImport(text) {
 }
 
 // ================================================================
+// 题库编辑（应用内加题/改题/删题/导出，全部存本机，不上传）
+// ================================================================
+// 把当前题库写回本地存储
+function saveQBank() {
+    try { localStorage.setItem(QBANK_KEY, JSON.stringify({ DATA, PASSAGES })); return true; }
+    catch (e) { alert('保存失败：设备存储空间可能不足'); return false; }
+}
+// 为新题生成不重复的 id
+function genQid(subject, type) {
+    const exists = (DATA[subject] && DATA[subject].types[type]) ? DATA[subject].types[type] : [];
+    let id, n = 0;
+    do { id = 'usr' + Date.now().toString(36) + (n || ''); n++; } while (exists.some(x => x.id === id));
+    return id;
+}
+// 导出当前（含已编辑）题库为文件，供备份
+function exportQBank() {
+    try {
+        const blob = new Blob([JSON.stringify({ PASSAGES, DATA }, null, 1)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = '刷题宝-题库.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { alert('导出失败，请重试'); }
+}
+// 删除一道题（连带清理该题相关的答题/收藏/复习状态；空题型/空科目一并移除）
+function deleteCurrentQuestion(subject, type, id) {
+    const arr = (DATA[subject] && DATA[subject].types[type]) || null;
+    if (!arr) return;
+    const i = arr.findIndex(x => x.id === id);
+    if (i < 0) return;
+    arr.splice(i, 1);
+    const key = qkey(subject, type, id);
+    ['answers', 'pending', 'blankInput', 'showExplanation', 'showTranslation', 'favorites', 'reviewPool'].forEach(f => { delete state[f][key]; });
+    if (arr.length === 0) delete DATA[subject].types[type];
+    if (DATA[subject] && Object.keys(DATA[subject].types).length === 0) delete DATA[subject];
+    state.subjects = Object.keys(DATA);
+    saveQBank();
+    applyStateValidation();
+    closeOverlay();
+    render();
+}
+// 加题/改题表单
+function openQuestionEditor(mode, subject, type, id) {
+    let item = { question: '', answer: '', explanation: '', options: [] };
+    if (mode === 'edit') {
+        const arr = (DATA[subject] && DATA[subject].types[type]) || [];
+        const found = arr.find(x => x.id === id);
+        if (found) item = found; else mode = 'add';
+    }
+    const inputStyle = 'width:100%;padding:8px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);color:var(--text-primary);font-size:14px;margin-bottom:8px;';
+    const labelStyle = 'font-size:12px;color:var(--text-muted);display:block;margin-bottom:2px;';
+    const subjectOpts = state.subjects.map(s => `<option value="${escapeHtml(s)}">`).join('');
+    const typeOpts = (subject && DATA[subject] ? getTypes(subject) : []).map(t => `<option value="${escapeHtml(t)}">`).join('');
+    const optsText = (item.options || []).map(o => o.replace(/^[A-Za-z][\.\)、]\s*/, '')).join('\n');
+    let html = '<span class="ov-close" id="ovClose">✕</span>';
+    html += `<h2>${mode === 'edit' ? '✏️ 改这道题' : '➕ 加一道题'}</h2>`;
+    html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">题库只存在你这台设备上，不会上传。</div>`;
+    html += `<label style="${labelStyle}">科目</label><input id="edSubject" list="edSubjects" value="${escapeHtml(mode === 'edit' ? subject : (subject || state.currentSubject || ''))}" style="${inputStyle}"><datalist id="edSubjects">${subjectOpts}</datalist>`;
+    html += `<label style="${labelStyle}">题型（如 单选题 / 多选题 / 判断题 / 填空题 / 计算题）</label><input id="edType" list="edTypes" value="${escapeHtml(mode === 'edit' ? type : (type || state.currentType || ''))}" style="${inputStyle}"><datalist id="edTypes">${typeOpts}</datalist>`;
+    html += `<label style="${labelStyle}">题干</label><textarea id="edQuestion" style="${inputStyle}height:72px;">${escapeHtml(item.question || '')}</textarea>`;
+    html += `<label style="${labelStyle}">选项（每行一个；非选择题留空。不用写 A/B/C，会自动加）</label><textarea id="edOptions" placeholder="例如：&#10;巨型化和微型化&#10;网络化&#10;智能化" style="${inputStyle}height:84px;">${escapeHtml(optsText)}</textarea>`;
+    html += `<label style="${labelStyle}">答案（选择题填字母如 A 或 AB；判断题填 正确 或 错误；其它直接填答案）</label><input id="edAnswer" value="${escapeHtml(item.answer || '')}" style="${inputStyle}">`;
+    html += `<label style="${labelStyle}">解析（可留空）</label><textarea id="edExplanation" style="${inputStyle}height:60px;">${escapeHtml(item.explanation || '')}</textarea>`;
+    html += `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">💡 数学公式用 $...$ 包起来，例如 $x^2+1$。</div>`;
+    html += `<div class="flex-row" style="gap:6px;">
+        <button class="nav-btn next" id="edSave" style="flex:1;">保存</button>
+        ${mode === 'edit' ? '<button class="nav-btn prev" id="edDelete" style="flex:0 0 auto;background:#fee2e2;color:#b91c1c;">删除此题</button>' : ''}
+    </div>`;
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    document.getElementById('edSave').onclick = function () {
+        const ns = document.getElementById('edSubject').value.trim();
+        const nt = document.getElementById('edType').value.trim();
+        const nq = document.getElementById('edQuestion').value.trim();
+        const na = document.getElementById('edAnswer').value.trim();
+        const optLines = document.getElementById('edOptions').value.split('\n').map(x => x.trim()).filter(Boolean);
+        const ne = document.getElementById('edExplanation').value.trim();
+        if (!ns || !nt || !nq || !na) { alert('科目、题型、题干、答案都要填写'); return; }
+        const newItem = { id: (mode === 'edit' ? id : genQid(ns, nt)), question: nq, answer: na };
+        if (optLines.length) newItem.options = optLines;
+        if (ne) newItem.explanation = ne;
+        if (!DATA[ns]) DATA[ns] = { types: {} };
+        if (!DATA[ns].types[nt]) DATA[ns].types[nt] = [];
+        if (mode === 'edit' && (ns !== subject || nt !== type)) {
+            // 改题时科目/题型变了：从原位置移除
+            const oldArr = (DATA[subject] && DATA[subject].types[type]) || [];
+            const oi = oldArr.findIndex(x => x.id === id);
+            if (oi >= 0) oldArr.splice(oi, 1);
+            if (DATA[subject] && oldArr.length === 0) { delete DATA[subject].types[type]; if (Object.keys(DATA[subject].types).length === 0) delete DATA[subject]; }
+            DATA[ns].types[nt].push(newItem);
+        } else if (mode === 'edit') {
+            const arr = DATA[ns].types[nt];
+            const i = arr.findIndex(x => x.id === id);
+            if (i >= 0) arr[i] = newItem; else arr.push(newItem);
+        } else {
+            DATA[ns].types[nt].push(newItem);
+        }
+        state.subjects = Object.keys(DATA);
+        if (!saveQBank()) return;
+        state.reviewMode = false; state.wrongOnly = false; state.favOnly = false;
+        state.currentSubject = ns; state.currentType = nt;
+        const qs = getFilteredQuestions(ns, nt);
+        const idx = qs.findIndex(x => x.id === newItem.id);
+        state.currentIndex = idx >= 0 ? idx : 0;
+        closeOverlay();
+        render();
+    };
+    document.getElementById('edDelete')?.addEventListener('click', function () {
+        if (confirm('确定删除这道题？此操作不可撤销。')) deleteCurrentQuestion(subject, type, id);
+    });
+}
+
+// ================================================================
 // STATE
 // ================================================================
 const state = {
@@ -273,14 +393,41 @@ const state = {
     // —— 新功能状态 ——
     favorites: {},        // 收藏：key -> true
     favOnly: false,       // 只看收藏
-    reviewPool: {},       // 强化错题队列：key -> 连续答对次数（满 REVIEW_GRAD 毕业）
+    reviewPool: {},       // 间隔重复队列：key -> { due:'YYYY-MM-DD', ivl:天数, reps:已答对次数 }
     reviewMode: false,    // 强化错题模式
     studyDays: [],        // 打卡：['2026-06-27', ...]
     exam: null,           // 模考会话（见 startExam）
     fontScale: 'normal',  // 字号：small|normal|large
-    vocab: {}             // 英语生词：{ 词(小写): true }
+    vocab: {},            // 英语生词：{ 词(小写): true }
+    pending: {},          // 多选题未提交的勾选：key -> "AB"（选满正确数量才判分）
+    blankInput: {}        // 填空题用户输入的原文：key -> 字符串
 };
-const REVIEW_GRAD = 2;    // 强化模式连续答对几次算掌握
+// 间隔重复：答对后下次复习间隔（天）；答对次数超过这个列表长度即"毕业"移出队列
+const SRS_INTERVALS = [1, 3, 7, 15];
+// 日期加天数（输入/输出均为 'YYYY-MM-DD'）
+function addDays(dateStr, days) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + dd;
+}
+// 兼容旧数据：把旧版 reviewPool（数字=连续答对次数）迁移成新结构
+function normalizeReviewPool() {
+    for (const k in state.reviewPool) {
+        const v = state.reviewPool[k];
+        if (typeof v !== 'object' || v === null) {
+            state.reviewPool[k] = { due: todayStr(), ivl: 0, reps: (typeof v === 'number' ? v : 0) };
+        }
+    }
+}
+// 某题是否"今天该复习"（到期或逾期）
+function isDue(key) {
+    const r = state.reviewPool[key];
+    if (!r) return false;
+    const due = (typeof r === 'object' && r.due) ? r.due : todayStr();
+    return due <= todayStr();
+}
 
 // ================================================================
 // 进度持久化（localStorage 自动保存/恢复）
@@ -290,7 +437,8 @@ const STORAGE_KEY = 'shuatibao_v1';
 const PERSIST_FIELDS = ['answers', 'showExplanation', 'showTranslation',
     'currentSubject', 'currentType', 'currentIndex',
     'studyMode', 'wrongOnly', 'shuffled', 'shuffledIndices', 'darkMode',
-    'favorites', 'favOnly', 'reviewPool', 'studyDays', 'exam', 'fontScale', 'vocab'];
+    'favorites', 'favOnly', 'reviewPool', 'studyDays', 'exam', 'fontScale', 'vocab',
+    'pending', 'blankInput'];
 
 function serializeState() {
     const o = {};
@@ -313,6 +461,7 @@ function loadState() {
 }
 // 题库可能变动：把恢复后的当前位置校正到合法范围，避免脏数据导致空白
 function applyStateValidation() {
+    normalizeReviewPool();   // 迁移旧版强化队列数据
     if (!state.subjects || state.subjects.length === 0) return; // 还没导入题库
     if (!state.subjects.includes(state.currentSubject)) {
         state.currentSubject = state.subjects[0];
@@ -483,10 +632,16 @@ function recordAnswer(subject, type, id, val, correctAnswer) {
     state.answers[key] = val;
     const correct = (val === correctAnswer);
     if (!correct) {
-        state.reviewPool[key] = 0;                 // 答错：进/重置强化队列
+        state.reviewPool[key] = { due: todayStr(), ivl: 0, reps: 0 };   // 答错：今天就该复习
     } else if (key in state.reviewPool) {
-        state.reviewPool[key] = (state.reviewPool[key] || 0) + 1;
-        if (state.reviewPool[key] >= REVIEW_GRAD) delete state.reviewPool[key]; // 掌握，毕业
+        const r = state.reviewPool[key];
+        const reps = ((r && typeof r === 'object') ? r.reps : 0) + 1;
+        if (reps > SRS_INTERVALS.length) {
+            delete state.reviewPool[key];                                // 全部间隔过关，毕业
+        } else {
+            const ivl = SRS_INTERVALS[reps - 1];
+            state.reviewPool[key] = { due: addDays(todayStr(), ivl), ivl: ivl, reps: reps };  // 答对：推后下次复习
+        }
     }
     recordStudyToday();
 }
@@ -501,7 +656,10 @@ function toggleFav(subject, type, id) {
 function favCount() { return Object.keys(state.favorites).length; }
 
 // —— 强化错题队列 ——
-function reviewCount() { return Object.keys(state.reviewPool).length; }
+// "今日复习"的题数（到期/逾期）
+function reviewCount() { let n = 0; for (const k in state.reviewPool) if (isDue(k)) n++; return n; }
+// 队列里的总题数（含未到期的，用于提示）
+function reviewPoolTotal() { return Object.keys(state.reviewPool).length; }
 // 返回强化队列里的题目（跨全部科目/题型），附带所在科目与题型
 function getReviewQuestions() {
     const out = [];
@@ -509,7 +667,7 @@ function getReviewQuestions() {
         const types = DATA[s].types;
         for (const t in types) {
             for (const item of types[t]) {
-                if (qkey(s, t, item.id) in state.reviewPool) {
+                if (isDue(qkey(s, t, item.id))) {
                     out.push(expandQuestion(Object.assign({}, item, { _subject: s }), t));
                 }
             }
@@ -575,6 +733,21 @@ function updateProgress() {
     document.getElementById('progressText').textContent = `${answered} / ${total}`;
 }
 
+// —— 数学公式渲染（KaTeX 加载完成后才生效；用 $...$ 包裹 LaTeX）——
+function typesetMath(el) {
+    if (!el || !window.renderMathInElement) return;
+    try {
+        renderMathInElement(el, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false },
+                { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+        });
+    } catch (e) { /* 公式语法错误时静默跳过，保留原文 */ }
+}
 // —— 字号 ——
 function applyFontScale() {
     document.body.classList.remove('fs-small', 'fs-large');
@@ -588,6 +761,8 @@ function applyThemeColor() {
 }
 // —— 英语生词 ——
 function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// 填空题宽松比对：去首尾空白、转小写、去除所有空白与常见中英文逗号/分号
+function normBlank(s) { return String(s).trim().toLowerCase().replace(/\s+/g, '').replace(/[，,；;、]/g, ''); }
 function markupEnglish(text) {
     // 转义后把英文单词包成可点击 span（已标记的加 marked），非单词字符原样保留
     return escapeHtml(text).replace(/[A-Za-z][A-Za-z'-]*/g, function (w) {
@@ -639,7 +814,7 @@ function updateToolbar() {
     const reviewBtn = document.getElementById('reviewToggle');
     if (reviewBtn) {
         const n = reviewCount();
-        reviewBtn.textContent = '🔁 强化错题' + (n ? ' (' + n + ')' : '');
+        reviewBtn.textContent = '📅 今日复习' + (n ? ' (' + n + ')' : '');
         reviewBtn.classList.toggle('active', state.reviewMode);
     }
     const favBtn = document.getElementById('favToggle');
@@ -749,7 +924,7 @@ function renderQuestion() {
     const questions = getFilteredQuestions(state.currentSubject, state.currentType);
     if (!questions || questions.length === 0) {
         let msg = '该题型暂无题目';
-        if (state.reviewMode) msg = '🎉 强化队列已清空，错题都掌握啦！';
+        if (state.reviewMode) msg = reviewPoolTotal() > 0 ? '🎉 今天的复习都做完啦，明天再来！' : '🎉 复习队列已清空，错题都掌握啦！';
         else if (state.favOnly) msg = '⭐ 这里还没有收藏的题目';
         else if (state.wrongOnly) msg = '🎉 错题本为空，继续加油！';
         area.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>${msg}</p></div>`;
@@ -805,7 +980,7 @@ function renderQuestion() {
         <div class="q-header">
             <span class="q-number">${idx} / ${total}</span>
             <span class="q-type-badge">${state.reviewMode ? qSubject + ' · ' : ''}${q._type}</span>
-            ${state.reviewMode ? `<span class="study-mode-badge" style="background:#fee2e2;color:#b91c1c;">🔁 强化 已对 ${state.reviewPool[qkey(qSubject,qType,q.id)] || 0}/${REVIEW_GRAD}</span>` : ''}
+            ${state.reviewMode ? `<span class="study-mode-badge" style="background:#fee2e2;color:#b91c1c;">📅 复习 已巩固 ${(state.reviewPool[qkey(qSubject,qType,q.id)] || {}).reps || 0}/${SRS_INTERVALS.length}</span>` : ''}
             ${state.studyMode ? '<span class="study-mode-badge">📖 学习模式</span>' : ''}
             <button class="btn-sm" id="favBtn" style="${favOn ? 'background:#fef3c7;color:#92400e;border-color:#fcd34d;' : ''}">${favOn ? '⭐ 已收藏' : '☆ 收藏'}</button>
         </div>
@@ -868,21 +1043,29 @@ function renderQuestion() {
         const isMulti = type.includes('多选') || type === '多选题';
         const isCloze = (type === '选词填空');
         const gridClass = isCloze ? 'options-grid' : 'options';
+        // 多选题：未判分时用 pending 暂存勾选，凑满正确数量才判分（committedMulti 才有值）
+        const mKey = qkey(qSubject, qType, q.id);
+        const committedMulti = isMulti ? getAnswer(qSubject, qType, q.id) : '';
+        const pendingMulti = isMulti ? (state.pending[mKey] || '') : '';
+        const multiSel = committedMulti || pendingMulti;
+        const multiGraded = isMulti && !!committedMulti;
+        const need = isMulti ? (q.answer.match(/[A-Za-z]/g) || []).length : 0;
         html += `<div class="${gridClass}">`;
         const labelChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         q.options.forEach((opt, i) => {
             const label = labelChars[i] || '?';
-            const isSelected = selected && (isMulti ? selected.includes(label) : selected === label);
+            const isSelected = isMulti ? multiSel.includes(label) : (selected === label);
             const isCorrect = q.answer.includes(label);
+            const reveal = isMulti ? (multiGraded || showExp) : (showExp || state.studyMode);
             let cls = 'option-item';
             if (isSelected) cls += ' selected';
-            if (showExp || state.studyMode) {
+            if (reveal) {
                 if (isCorrect) cls += ' correct';
                 else if (isSelected && !isCorrect) cls += ' wrong';
             }
             if (state.studyMode) cls += ' disabled';
             const checkMark = isSelected ? '✅' : '';
-            const cleanText = opt.replace(/^[A-Z]\)\s*/, '');
+            const cleanText = opt.replace(/^[A-Za-z][\.\)、]\s*/, '');
             html += `
                 <div class="${cls}" data-opt="${label}" data-idx="${i}">
                     <span class="label">${label}.</span>
@@ -894,22 +1077,45 @@ function renderQuestion() {
         });
         html += `</div>`;
         if (isMulti) {
-            html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">💡 多选题，请选择所有正确答案</div>`;
+            const tip = multiGraded ? '💡 多选题（如需重做点下方「重置」）' : `💡 多选题，请选择所有正确答案；选满 ${need} 项后自动判分`;
+            html += `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${tip}</div>`;
         }
-    } else {
+    } else if (type === '填空题') {
+        const bKey = qkey(qSubject, qType, q.id);
+        const committedBlank = getAnswer(qSubject, qType, q.id);
+        const typed = state.blankInput[bKey];
+        const revealBlank = showExp || state.studyMode || !!typed || !!committedBlank;
+        const awaitingJudge = !!typed && !committedBlank;
         html += `<div class="essay-box" style="background:var(--bg-card);padding:12px 14px;border-radius:10px;border:1px solid var(--border-color);margin-bottom:10px;">`;
-        if (type === '填空题') {
-            if (showExp || state.studyMode) {
-                html += `<div style="font-size:14px;color:var(--text-secondary);">答案：<span class="blank-answer">${q.answer}</span></div>`;
-            } else {
-                html += `<div style="font-size:14px;color:var(--text-muted);">点击下方"显示答案"查看</div>`;
-            }
+        if (!typed && !committedBlank && !showExp && !state.studyMode) {
+            // 还没作答：显示输入框
+            html += `<input id="blankInput" type="text" autocomplete="off" placeholder="在此输入你的答案" style="width:100%;padding:9px 11px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-app);color:var(--text-primary);font-size:14px;" />`;
+            html += `<button class="toggle-answer-btn active" id="blankSubmit" style="margin-top:8px;">提交</button>`;
         } else {
-            if (showExp || state.studyMode) {
-                html += `<div class="${isMath ? 'math' : ''}" style="font-size:14px;line-height:1.7;color:var(--text-secondary);white-space:pre-wrap;">${isMath ? escapeHtml(q.answer) : q.answer}</div>`;
-            } else {
-                html += `<div style="font-size:14px;color:var(--text-muted);">点击下方"显示答案"查看参考答案</div>`;
+            if (typed) {
+                const ok = (committedBlank === q.answer);
+                const col = committedBlank ? (ok ? '#22c55e' : '#ef4444') : 'var(--text-primary)';
+                html += `<div style="font-size:14px;margin-bottom:6px;">你的答案：<span style="font-weight:600;color:${col};">${escapeHtml(typed)}</span></div>`;
             }
+            if (revealBlank) {
+                html += `<div class="${isMath ? 'math' : ''}" style="font-size:14px;color:var(--text-secondary);">参考答案：<span class="blank-answer">${escapeHtml(q.answer)}</span></div>`;
+            }
+            if (awaitingJudge) {
+                html += `<div style="font-size:12px;color:var(--text-muted);margin:8px 0 4px;">和参考答案对比一下，你答对了吗？</div>
+                    <div class="flex-row" style="gap:6px;">
+                        <button class="toggle-answer-btn" id="blankRight" style="background:#dcfce7;color:#16a34a;">✅ 我答对了</button>
+                        <button class="toggle-answer-btn" id="blankWrong" style="background:#fee2e2;color:#b91c1c;">❌ 答错了</button>
+                    </div>`;
+            }
+        }
+        html += `</div>`;
+    } else {
+        // 计算题/证明题/简答题等主观题：仅揭示参考答案
+        html += `<div class="essay-box" style="background:var(--bg-card);padding:12px 14px;border-radius:10px;border:1px solid var(--border-color);margin-bottom:10px;">`;
+        if (showExp || state.studyMode) {
+            html += `<div class="${isMath ? 'math' : ''}" style="font-size:14px;line-height:1.7;color:var(--text-secondary);white-space:pre-wrap;">${isMath ? escapeHtml(q.answer) : q.answer}</div>`;
+        } else {
+            html += `<div style="font-size:14px;color:var(--text-muted);">点击下方"显示答案"查看参考答案</div>`;
         }
         html += `</div>`;
     }
@@ -927,7 +1133,7 @@ function renderQuestion() {
         html += `
             <div class="flex-row" style="margin-top:10px;gap:6px;flex-wrap:wrap;">
                 <button class="toggle-answer-btn ${showExp ? 'active' : ''}" id="toggleAnswerBtn">${showExp ? '隐藏答案' : '显示答案'}</button>
-                ${(q.options && q.options.length > 0) || type === '判断题' ? `<button class="toggle-answer-btn" id="resetAnswerBtn" style="background:#fee2e2;color:#b91c1c;">重置</button>` : ''}
+                ${(q.options && q.options.length > 0) || type === '判断题' || type === '填空题' ? `<button class="toggle-answer-btn" id="resetAnswerBtn" style="background:#fee2e2;color:#b91c1c;">重置</button>` : ''}
             </div>
         `;
     } else {
@@ -963,6 +1169,10 @@ function renderQuestion() {
                     <button data-fs="normal">A</button>
                     <button data-fs="large">A+</button>
                 </div>
+                <div style="font-size:12px;color:var(--text-muted);margin:6px 0 2px;">题库（全部存本机）</div>
+                <button id="menuAddQ" style="margin-top:2px;">➕ 加一道题</button>
+                <button id="menuEditQ" style="margin-top:2px;">✏️ 改这道题</button>
+                <button id="menuExportQBank" style="margin-top:2px;">💾 导出题库（备份）</button>
                 <button id="menuImportQBank" style="margin-top:4px;">📚 导入/更换题库</button>
                 <button id="resetAllData" style="color:#ef4444;margin-top:4px;">🗑️ 重置所有进度</button>
             </div>
@@ -989,18 +1199,28 @@ function renderQuestion() {
             el.addEventListener('click', function() {
                 if (this.classList.contains('disabled')) return;
                 const opt = this.dataset.opt;
+                const key = qkey(qSubject, qType, q.id);
                 const isMulti = (type.includes('多选') || type === '多选题');
-                let val = opt;
                 if (isMulti) {
-                    const current = state.answers[qkey(qSubject, qType, q.id)] || '';
-                    let parts = current ? current.split('') : [];
+                    if (state.answers[key]) return;   // 已判分：重选请用「重置」
+                    let parts = state.pending[key] ? state.pending[key].split('') : [];
                     if (parts.includes(opt)) parts = parts.filter(p => p !== opt);
                     else parts.push(opt);
                     parts.sort();
-                    val = parts.join('');
+                    state.pending[key] = parts.join('');
+                    const need = (q.answer.match(/[A-Za-z]/g) || []).length;
+                    if (need > 0 && parts.length >= need) {
+                        // 凑满正确数量：判分并揭示
+                        recordAnswer(qSubject, qType, q.id, state.pending[key], q.answer);
+                        state.showExplanation[key] = true;
+                        delete state.pending[key];
+                    }
+                    render();
+                    return;
                 }
-                recordAnswer(qSubject, qType, q.id, val, q.answer);
-                state.showExplanation[qkey(qSubject, qType, q.id)] = true;
+                // 单选 / 判断题：即时判分
+                recordAnswer(qSubject, qType, q.id, opt, q.answer);
+                state.showExplanation[key] = true;
                 render();
             });
         });
@@ -1010,7 +1230,37 @@ function renderQuestion() {
             render();
         });
         document.getElementById('resetAnswerBtn')?.addEventListener('click', () => {
-            delete state.answers[qkey(qSubject, qType, q.id)];
+            const key = qkey(qSubject, qType, q.id);
+            delete state.answers[key];
+            delete state.pending[key];
+            delete state.blankInput[key];
+            delete state.showExplanation[key];
+            render();
+        });
+
+        // 填空题：提交 + 自评
+        document.getElementById('blankSubmit')?.addEventListener('click', () => {
+            const inp = document.getElementById('blankInput');
+            const v = (inp && inp.value || '').trim();
+            if (!v) { alert('请先输入答案'); return; }
+            const key = qkey(qSubject, qType, q.id);
+            state.blankInput[key] = v;
+            if (normBlank(v) === normBlank(q.answer)) {
+                recordAnswer(qSubject, qType, q.id, q.answer, q.answer);   // 自动判对
+                state.showExplanation[key] = true;
+            }
+            render();   // 不一致则留给自评按钮
+        });
+        document.getElementById('blankRight')?.addEventListener('click', () => {
+            const key = qkey(qSubject, qType, q.id);
+            recordAnswer(qSubject, qType, q.id, q.answer, q.answer);
+            state.showExplanation[key] = true;
+            render();
+        });
+        document.getElementById('blankWrong')?.addEventListener('click', () => {
+            const key = qkey(qSubject, qType, q.id);
+            recordAnswer(qSubject, qType, q.id, '✗' + (state.blankInput[key] || ''), q.answer);
+            state.showExplanation[key] = true;
             render();
         });
     }
@@ -1098,6 +1348,18 @@ function renderQuestion() {
             render();
         });
     });
+    document.getElementById('menuAddQ')?.addEventListener('click', function() {
+        dataMenu.classList.remove('show');
+        openQuestionEditor('add', qSubject, qType);
+    });
+    document.getElementById('menuEditQ')?.addEventListener('click', function() {
+        dataMenu.classList.remove('show');
+        openQuestionEditor('edit', qSubject, qType, q.id);
+    });
+    document.getElementById('menuExportQBank')?.addEventListener('click', function() {
+        dataMenu.classList.remove('show');
+        exportQBank();
+    });
     document.getElementById('menuImportQBank')?.addEventListener('click', function() {
         dataMenu.classList.remove('show');
         pickQBankFile();
@@ -1120,6 +1382,7 @@ function renderQuestion() {
     });
 
     updateProgress();
+    typesetMath(area);
 }
 
 // ================================================================
@@ -1133,6 +1396,7 @@ function showOverlay(innerHtml) {
     o.innerHTML = '<div class="overlay-card">' + innerHtml + '</div>';
     o.addEventListener('click', e => { if (e.target === o) closeOverlay(); });
     document.body.appendChild(o);
+    typesetMath(o);
     return o;
 }
 function renderStats() {
@@ -1160,6 +1424,104 @@ function renderStats() {
     showOverlay(html);
     document.getElementById('ovClose').onclick = closeOverlay;
     document.getElementById('ovDone').onclick = closeOverlay;
+}
+
+// ================================================================
+// 题目搜索
+// ================================================================
+// 跳到指定题目（清掉会隐藏它的过滤模式）
+function jumpToQuestion(s, t, id) {
+    state.reviewMode = false; state.wrongOnly = false; state.favOnly = false;
+    state.currentSubject = s; state.currentType = t;
+    const qs = getFilteredQuestions(s, t);
+    const i = qs.findIndex(x => x.id === id);
+    state.currentIndex = i >= 0 ? i : 0;
+    closeOverlay();
+    render();
+}
+function searchQuestions(kw) {
+    kw = kw.trim().toLowerCase();
+    if (!kw) return [];
+    const out = [];
+    for (const s of state.subjects) {
+        const types = DATA[s].types;
+        for (const t in types) {
+            for (const item of types[t]) {
+                const hay = ((item.question || '') + ' ' + (item.answer || '') + ' ' + ((item.options || []).join(' '))).toLowerCase();
+                if (hay.includes(kw)) { out.push({ s, t, item }); if (out.length >= 50) return out; }
+            }
+        }
+    }
+    return out;
+}
+function renderSearch() {
+    let html = '<span class="ov-close" id="ovClose">✕</span><h2>🔍 搜索题目</h2>';
+    html += '<input id="searchInput" type="text" autocomplete="off" placeholder="输入关键词（题干 / 答案 / 选项）" style="width:100%;padding:9px 11px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-card);color:var(--text-primary);font-size:14px;margin-bottom:10px;">';
+    html += '<div id="searchResults" style="max-height:52vh;overflow-y:auto;"></div>';
+    showOverlay(html);
+    document.getElementById('ovClose').onclick = closeOverlay;
+    const inp = document.getElementById('searchInput');
+    const box = document.getElementById('searchResults');
+    function update() {
+        if (!inp.value.trim()) { box.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">输入关键词开始搜索…</div>'; return; }
+        const res = searchQuestions(inp.value);
+        if (!res.length) { box.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">没有找到匹配的题目</div>'; return; }
+        box.innerHTML = res.map((r, i) =>
+            `<div class="search-hit" data-i="${i}" style="padding:8px 6px;border-bottom:1px solid var(--border-color);cursor:pointer;font-size:13px;line-height:1.5;">
+                <span style="color:var(--text-muted);font-size:11px;">[${r.s} / ${r.t}]</span><br>${escapeHtml(r.item.question.slice(0, 60))}${r.item.question.length > 60 ? '…' : ''}
+            </div>`).join('') + (res.length >= 50 ? '<div style="font-size:11px;color:var(--text-muted);padding:6px 0;">仅显示前 50 条，请补充关键词缩小范围</div>' : '');
+        box.querySelectorAll('.search-hit').forEach(el => el.onclick = () => { const r = res[+el.dataset.i]; jumpToQuestion(r.s, r.t, r.item.id); });
+    }
+    inp.addEventListener('input', update);
+    update();
+    setTimeout(() => inp.focus(), 50);
+}
+
+// ================================================================
+// 演算草稿区（手写画板，临时不保存）
+// ================================================================
+function openScratchpad() {
+    closeOverlay();
+    const o = document.createElement('div');
+    o.id = 'overlay'; o.className = 'overlay';
+    o.innerHTML = `
+      <div class="overlay-card" style="max-width:520px;">
+        <span class="ov-close" id="ovClose">✕</span>
+        <h2>✏️ 演算草稿区</h2>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">用手指或鼠标在下面手写演算，仅临时使用、关闭即清空。</div>
+        <div class="flex-row" style="gap:6px;margin-bottom:8px;">
+          <button class="toggle-answer-btn active" id="penBtn">🖊 笔</button>
+          <button class="toggle-answer-btn" id="eraserBtn">🩹 橡皮</button>
+          <button class="toggle-answer-btn" id="clearBtn" style="background:#fee2e2;color:#b91c1c;">🗑 清空</button>
+        </div>
+        <canvas id="scratchCanvas" style="width:100%;height:60vh;border:1px solid var(--border-color);border-radius:10px;background:#fff;touch-action:none;display:block;"></canvas>
+      </div>`;
+    document.body.appendChild(o);
+    o.addEventListener('click', e => { if (e.target === o) closeOverlay(); });
+    document.getElementById('ovClose').onclick = closeOverlay;
+    const cv = document.getElementById('scratchCanvas');
+    const ctx = cv.getContext('2d');
+    const rect = cv.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = rect.width * dpr; cv.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    let drawing = false, erase = false, lastX = 0, lastY = 0;
+    function pos(e) { const r = cv.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
+    function start(e) { drawing = true; const p = pos(e); lastX = p.x; lastY = p.y; e.preventDefault(); }
+    function move(e) {
+        if (!drawing) return; const p = pos(e);
+        ctx.strokeStyle = erase ? '#ffffff' : '#1e293b';
+        ctx.lineWidth = erase ? 22 : 2.5;
+        ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y); ctx.stroke();
+        lastX = p.x; lastY = p.y; e.preventDefault();
+    }
+    function end() { drawing = false; }
+    cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+    cv.addEventListener('touchstart', start, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', end);
+    document.getElementById('penBtn').onclick = function () { erase = false; this.classList.add('active'); document.getElementById('eraserBtn').classList.remove('active'); };
+    document.getElementById('eraserBtn').onclick = function () { erase = true; this.classList.add('active'); document.getElementById('penBtn').classList.remove('active'); };
+    document.getElementById('clearBtn').onclick = function () { ctx.clearRect(0, 0, cv.width, cv.height); };
 }
 
 // ================================================================
@@ -1227,7 +1589,7 @@ function renderExamOptions(q, selected) {
         const isMulti = type.includes('多选');
         html += `<div class="${type === '选词填空' ? 'options-grid' : 'options'}">`;
         const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        q.options.forEach((opt, i) => { const lab = L[i]; const sel = selected && (isMulti ? selected.includes(lab) : selected === lab); const txt = opt.replace(/^[A-Z]\)\s*/, ''); html += `<div class="option-item ${sel ? 'selected' : ''}" data-exopt="${lab}"><span class="label">${lab}.</span><span class="text">${txt}</span>${sel ? '<span class="check-mark">✅</span>' : ''}</div>`; });
+        q.options.forEach((opt, i) => { const lab = L[i]; const sel = selected && (isMulti ? selected.includes(lab) : selected === lab); const txt = opt.replace(/^[A-Za-z][\.\)、]\s*/, ''); html += `<div class="option-item ${sel ? 'selected' : ''}" data-exopt="${lab}"><span class="label">${lab}.</span><span class="text">${txt}</span>${sel ? '<span class="check-mark">✅</span>' : ''}</div>`; });
         html += '</div>';
         if (isMulti) html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">💡 多选题</div>';
     }
@@ -1277,6 +1639,7 @@ function renderExam() {
     document.getElementById('exSubmitAny')?.addEventListener('click', () => { if (confirm('确定提前交卷吗？')) submitExam(); });
     document.getElementById('exQuit')?.addEventListener('click', () => { if (confirm('退出将放弃本次模考，确定？')) exitExam(); });
     if (rem !== null) { examTimerId = setInterval(() => { const r = examRemaining(); if (r <= 0) { submitExam(); return; } const el = document.getElementById('examTimer'); if (el) el.textContent = '⏱ ' + fmtTime(r); }, 1000); }
+    typesetMath(area);
 }
 function renderExamResult(area) {
     const ex = state.exam; const total = ex.items.length; const correct = gradeExam();
@@ -1297,6 +1660,7 @@ function renderExamResult(area) {
     area.innerHTML = html;
     document.getElementById('exAgain').onclick = () => { state.exam = null; render(); openExamConfig(); };
     document.getElementById('exDone').onclick = exitExam;
+    typesetMath(area);
 }
 
 // ================================================================
@@ -1330,7 +1694,7 @@ function init() {
     document.getElementById('reviewToggle').addEventListener('click', function() {
         state.reviewMode = !state.reviewMode;
         if (state.reviewMode) {
-            if (reviewCount() === 0) { state.reviewMode = false; alert('强化队列是空的～先去刷题，答错的题会自动进来。'); return; }
+            if (reviewCount() === 0) { state.reviewMode = false; alert(reviewPoolTotal() > 0 ? '今天没有要复习的题啦，明天再来～' : '复习队列是空的～先去刷题，答错的题会自动进来。'); return; }
             state.wrongOnly = false; state.favOnly = false; state.studyMode = false;
         }
         state.currentIndex = 0;
@@ -1346,6 +1710,11 @@ function init() {
         render();
     });
     document.getElementById('examBtn').addEventListener('click', openExamConfig);
+    document.getElementById('searchBtn').addEventListener('click', function() {
+        if (!hasQBank()) { alert('请先导入题库'); return; }
+        renderSearch();
+    });
+    document.getElementById('scratchBtn').addEventListener('click', openScratchpad);
     document.getElementById('statsBtn').addEventListener('click', renderStats);
     document.getElementById('shuffleBtn').addEventListener('click', function() {
         reshuffleCurrent();
@@ -1357,6 +1726,12 @@ function init() {
 }
 
 init();
+
+// KaTeX 是 defer 脚本，首屏渲染时可能还没加载完；加载完成后补渲染一次当前页面的公式
+window.addEventListener('load', function() {
+    typesetMath(document.getElementById('questionArea'));
+    typesetMath(document.getElementById('overlay'));
+});
 
 // PWA：注册 Service Worker（仅在 http(s) 下生效，本地 file:// 会静默跳过）
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

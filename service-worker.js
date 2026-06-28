@@ -1,19 +1,27 @@
 // 刷题宝 Service Worker —— 离线缓存（cache-first）
 // 改了 index.html / 图标 / manifest 后，把 CACHE 版本号 +1，用户下次联网打开即自动更新。
-const CACHE = 'shuatibao-v4';
+const CACHE = 'shuatibao-v5';
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
-  './icon-512-maskable.png'
+  './icon-512-maskable.png',
+  // KaTeX 数学公式渲染（CDN 支持 CORS，可被预缓存，缓存后离线也能渲染公式）
+  'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+  'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+  'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js'
 ];
 
-// 安装：预缓存所有静态资源
+// 安装：预缓存静态资源。本地资源必须成功；KaTeX（CDN）尽力而为，失败也不阻塞安装
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((c) =>
+      Promise.all(ASSETS.map((url) =>
+        c.add(url).catch(() => { /* 某个资源（如 CDN）暂时取不到就跳过，联网使用时再缓存 */ })
+      ))
+    ).then(() => self.skipWaiting())
   );
 });
 
@@ -33,7 +41,8 @@ self.addEventListener('fetch', (e) => {
     caches.match(e.request).then((hit) => {
       if (hit) return hit;
       return fetch(e.request).then((resp) => {
-        if (resp && resp.status === 200 && resp.type === 'basic') {
+        // 缓存同源资源(basic)与可缓存的跨源资源(cors，如 KaTeX 及其字体)；opaque 不缓存
+        if (resp && (resp.status === 200 && (resp.type === 'basic' || resp.type === 'cors'))) {
           const copy = resp.clone();
           caches.open(CACHE).then((c) => c.put(e.request, copy));
         }
