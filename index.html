@@ -1358,7 +1358,8 @@ function renderQuestion() {
     }
 
     if (q.beginner) {
-        const showBeg = beginnerVisible(qSubject, qType, q.id, isMath);
+        // 数学题的零基础详解里含完整解题过程，只在「答案已揭示」后才默认展开，避免没答就剧透
+        const showBeg = beginnerVisible(qSubject, qType, q.id, isMath && showExp);
         html += `<div class="flex-row" style="margin-top:8px;">
                 <button class="toggle-answer-btn ${showBeg ? 'active' : ''}" id="beginnerBtn" style="background:#fef9c3;color:#854d0e;border-color:#fde047;">${showBeg ? '🔰 收起零基础详解' : '🔰 零基础详解'}</button>
             </div>`;
@@ -1508,7 +1509,7 @@ function renderQuestion() {
 
     // 零基础详解（学习模式下也可用，故放在 studyMode 判断之外）
     document.getElementById('beginnerBtn')?.addEventListener('click', () => {
-        const cur = beginnerVisible(qSubject, qType, q.id, isMath);
+        const cur = beginnerVisible(qSubject, qType, q.id, isMath && showExp);
         setBeginner(qSubject, qType, q.id, !cur);
         render();
     });
