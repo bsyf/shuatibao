@@ -1,6 +1,11 @@
 // 刷题宝 Service Worker —— 离线缓存（cache-first）
 // 改了 index.html / 图标 / manifest 后，把 CACHE 版本号 +1，用户下次联网打开即自动更新。
-const CACHE = 'shuatibao-v10';
+// 【新增·AI 语音朗读功能】版本号 v10 → v11，使新版 index.html（含 TTS 模块）对已安装用户生效
+// 【修改·TTS 优化】版本号 v11 → v12：防剧透 + 音质优化 + 自动播放 + 翻译朗读 + 小米15适配
+// 【修改·音色展示优化】版本号 v12 → v13：音色列表加试听按钮 + 缺微软云系列提示装 Edge
+// 【修改·装机指引】版本号 v13 → v14：补充装第三方 TTS 引擎详细步骤
+// 【修改·Xiaoyi特调】版本号 v14 → v15：Xiaoyi/Natural 音色置顶 + 在线音色标注「需Edge」
+const CACHE = 'shuatibao-v15';
 const ASSETS = [
   './',
   './index.html',
