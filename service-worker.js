@@ -6,7 +6,8 @@
 // 【修改·装机指引】版本号 v13 → v14：补充装第三方 TTS 引擎详细步骤
 // 【修改·Xiaoyi特调】版本号 v14 → v15：Xiaoyi/Natural 音色置顶 + 在线音色标注「需Edge」
 // 【修改·卡顿优化】版本号 v15 → v16：keep-alive 间隔 10s→25s 减少打断 + 分段合并短句减少网络请求
-const CACHE = 'shuatibao-v16';
+// 【修改·强化检测】版本号 v16 → v17：音色加载轮询兜底 + 区分浏览器不支持/未加载 + 无中文音色回退任意音色
+const CACHE = 'shuatibao-v17';
 const ASSETS = [
   './',
   './index.html',
