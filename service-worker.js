@@ -5,7 +5,8 @@
 // 【修改·音色展示优化】版本号 v12 → v13：音色列表加试听按钮 + 缺微软云系列提示装 Edge
 // 【修改·装机指引】版本号 v13 → v14：补充装第三方 TTS 引擎详细步骤
 // 【修改·Xiaoyi特调】版本号 v14 → v15：Xiaoyi/Natural 音色置顶 + 在线音色标注「需Edge」
-const CACHE = 'shuatibao-v15';
+// 【修改·卡顿优化】版本号 v15 → v16：keep-alive 间隔 10s→25s 减少打断 + 分段合并短句减少网络请求
+const CACHE = 'shuatibao-v16';
 const ASSETS = [
   './',
   './index.html',

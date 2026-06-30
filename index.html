@@ -2422,23 +2422,33 @@ const TTS = (function () {
         });
     }
     // 长文本切段：按句末标点/换行切，单句仍超长则硬切；规避 iOS 截断
+    // 【修改·卡顿优化】切段后合并相邻短句直到接近 maxLen，减少段数 = 减少在线音色网络请求次数和段间空隙
     function splitText(text, maxLen) {
         maxLen = maxLen || 120;
-        const out = [];
+        const raw = [];
         const re = /[^。！？!?\n]+[。！？!?\n]+/g;
         let m, last = 0;
         while ((m = re.exec(text)) !== null) {
             const seg = m[0];
-            if (seg.length > maxLen) { for (let i = 0; i < seg.length; i += maxLen) out.push(seg.slice(i, i + maxLen)); }
-            else out.push(seg);
+            if (seg.length > maxLen) { for (let i = 0; i < seg.length; i += maxLen) raw.push(seg.slice(i, i + maxLen)); }
+            else raw.push(seg);
             last = re.lastIndex;
         }
         if (last < text.length) {
             const tail = text.slice(last);
-            if (tail.length > maxLen) for (let i = 0; i < tail.length; i += maxLen) out.push(tail.slice(i, i + maxLen));
-            else if (tail.trim()) out.push(tail);
+            if (tail.length > maxLen) for (let i = 0; i < tail.length; i += maxLen) raw.push(tail.slice(i, i + maxLen));
+            else if (tail.trim()) raw.push(tail);
         }
-        return out.filter(s => s && s.trim());
+        const cleaned = raw.filter(s => s && s.trim());
+        // 【修改·卡顿优化】合并相邻短句：累加到接近 maxLen 才作为一段，减少段数
+        const merged = [];
+        let buf = '';
+        for (const s of cleaned) {
+            if ((buf + s).length <= maxLen) buf += s;
+            else { if (buf) merged.push(buf); buf = s; }
+        }
+        if (buf) merged.push(buf);
+        return merged;
     }
     // 朗读前清洗：去 LaTeX 定界符/HTML 标签，换行转逗号停顿，得到纯文本
     function plainText(s) {
@@ -2454,10 +2464,11 @@ const TTS = (function () {
     function stopKeepAlive() { if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; } }
     function startKeepAlive() {
         stopKeepAlive();
-        // Chrome 安卓：每 10 秒 pause+resume，防止长播被系统判定闲置而中断
+        // Chrome 安卓：pause+resume 防止长播被系统判定闲置而中断
+        // 【修改·卡顿优化】间隔 10秒→25秒：安卓约 15 秒挂起，25 秒保活够用且大幅减少 pause/resume 打断造成的卡顿
         keepAliveTimer = setInterval(function () {
             if (synth && synth.speaking && !synth.paused) { try { synth.pause(); synth.resume(); } catch (e) {} }
-        }, 10000);
+        }, 25000);
     }
     function clearHighlight() { document.querySelectorAll('.tts-hl').forEach(el => el.classList.remove('tts-hl')); }
     function highlight(el) { clearHighlight(); if (el) el.classList.add('tts-hl'); }
